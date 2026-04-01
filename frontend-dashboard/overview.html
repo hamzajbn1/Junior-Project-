@@ -1,0 +1,67 @@
+<!DOCTYPE html><html lang="en"><head><title>Research Trend Explorer - Overview</title>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+:root{--bg:#f3f5f8;--surface:#fff;--text:#17212b;--muted:#5f6b7a;--line:#cfd8e3;--primary:#2e5f88;--primary2:#3d739d;--shadow:0 6px 16px rgba(0,0,0,.06);--radius:14px}
+*{box-sizing:border-box}body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text)}a{text-decoration:none;color:inherit}
+.topbar{background:linear-gradient(180deg,var(--primary),var(--primary2));color:#fff;padding:18px 26px 16px;box-shadow:var(--shadow)}
+.topbar-inner{max-width:1400px;margin:0 auto;display:grid;grid-template-columns:220px 240px 1fr;gap:18px;align-items:stretch}
+.hero-box,.domain-box,.tabs-box{background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:14px;min-height:88px}
+.hero-title{font-size:28px;font-weight:700;margin:0 0 6px}.hero-sub{margin:0;font-size:13px;opacity:.92}.domain-label{font-size:12px;margin-bottom:8px}
+.domain-select,.search-input{width:100%;min-height:42px;border-radius:10px;border:1px solid var(--line);padding:0 12px;font-size:14px}
+.tabs-box{display:flex;align-items:center;justify-content:center;padding:10px}.tabs{width:100%;display:grid;grid-template-columns:repeat(5,1fr);overflow:hidden;border-radius:10px;background:#fff;border:1px solid var(--line)}
+.tab-link{display:block;text-align:center;padding:14px 8px;font-weight:700;color:var(--text);border-right:1px solid var(--line);font-size:15px}.tab-link:last-child{border-right:none}.tab-link.active{background:#e8f1f8;color:#12324a}
+.page{max-width:1400px;margin:22px auto 36px;padding:0 18px}.search-row{display:grid;grid-template-columns:1fr 180px;gap:14px;margin-bottom:18px}
+.search-card,.action-card,.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}.search-card,.action-card{padding:14px}
+.search-label,.section-title-small{font-size:12px;color:var(--muted);margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
+.search-btn{width:100%;min-height:42px;border:none;border-radius:10px;background:var(--primary);color:#fff;font-weight:700;cursor:pointer}
+.status{background:#f8fbfd;border:1px dashed var(--line);border-radius:12px;color:var(--muted);padding:11px 14px;margin-bottom:18px;font-size:14px}
+.overview-grid{display:grid;grid-template-columns:320px 1fr;gap:18px}.left-col,.right-col{display:grid;gap:18px}.card{overflow:hidden}
+.card-header{padding:16px 18px 14px;border-bottom:1px solid var(--line);font-size:16px;font-weight:700}.card-body{padding:16px 18px 18px}
+.metric-list{display:grid;gap:10px}.metric-item{display:flex;justify-content:space-between;gap:12px;border-bottom:1px dashed var(--line);padding-bottom:8px}.metric-item:last-child{border-bottom:none;padding-bottom:0}
+.metric-label{font-weight:700}.metric-value{color:var(--muted)}.note-list{margin:0;padding-left:18px;line-height:1.6;color:var(--muted)}
+.chart-meta{font-size:13px;color:var(--muted);margin-bottom:10px;line-height:1.5}.chart-wrap{position:relative;height:300px}.chart-wrap.small{height:250px}
+.two-col,.placeholder-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.footer-note{margin-top:22px;color:var(--muted);text-align:center;font-size:13px}.insight p{margin:0 0 8px;line-height:1.5}
+.axis-block{line-height:1.7;color:var(--muted)}@media (max-width:1100px){.topbar-inner,.search-row,.overview-grid,.two-col,.placeholder-grid{grid-template-columns:1fr}}
+</style>
+</head><body><header class="topbar"><div class="topbar-inner"><div class="hero-box"><h1 class="hero-title">Research Trend Explorer</h1><p class="hero-sub">Knowledge graph-driven dashboard prototype</p></div><div class="domain-box"><div class="domain-label">Domain Selector</div><select class="domain-select"><option>Computer Science</option><option>Artificial Intelligence</option><option>Any</option></select></div><div class="tabs-box"><div class="tabs"><a class="tab-link active" href="overview.html">Overview</a><a class="tab-link " href="topics.html">Topics</a><a class="tab-link " href="authors.html">Authors</a><a class="tab-link " href="organizations.html">Organizations</a><a class="tab-link " href="explorer.html">Explorer</a></div></div></div></header><main class="page">
+<div class="search-row"><div class="search-card"><div class="search-label">Search topic / material / task</div><input id="searchInput" class="search-input" value="Machine Learning"></div><div class="action-card"><div class="section-title-small">Run / Filter</div><button id="searchBtn" class="search-btn">Run Search</button></div></div>
+<div id="statusBar" class="status">Overview loaded successfully using prototype data. This page is ready for real back-end integration.</div>
+<section class="overview-grid">
+<div class="left-col">
+<section class="card"><div class="card-header">Summary Panel</div><div class="card-body metric-list">
+<div class="metric-item"><span class="metric-label">Period</span><span class="metric-value" id="summaryPeriod">2015 - 2025</span></div>
+<div class="metric-item"><span class="metric-label">Selected Topic</span><span class="metric-value" id="summaryTopic">Machine Learning</span></div>
+<div class="metric-item"><span class="metric-label">Total Publications</span><span class="metric-value">1,240</span></div>
+<div class="metric-item"><span class="metric-label">Total Citations</span><span class="metric-value">18,650</span></div>
+<div class="metric-item"><span class="metric-label">Average Citations per Paper</span><span class="metric-value">15.0</span></div>
+<div class="metric-item"><span class="metric-label">H-Index</span><span class="metric-value">42</span></div>
+<div class="metric-item"><span class="metric-label">Top Publisher</span><span class="metric-value">NeurIPS</span></div>
+<div class="metric-item"><span class="metric-label">Data Source</span><span class="metric-value">CSKG + OpenAlex</span></div>
+</div></section>
+<section class="card"><div class="card-header">Filters (Optional)</div><div class="card-body"><ul class="note-list"><li>Year range</li><li>Entity type: Topic / Material / Task</li><li>Sort by publications / citations</li><li>Top N = 5 / 10 / 20</li></ul></div></section>
+</div>
+<div class="right-col">
+<section class="card"><div class="card-header">Publications &amp; Citations</div><div class="card-body"><div class="chart-meta">Main overview chart. Bar chart = publications. Line chart = citations.</div><div class="chart-wrap"><canvas id="mainChart"></canvas></div></div></section>
+<section class="card"><div class="card-header">Citation Trend</div><div class="card-body"><div class="chart-meta">Average citations per paper over time.</div><div class="chart-wrap small"><canvas id="citationChart"></canvas></div></div></section>
+<div class="two-col">
+<section class="card"><div class="card-header">Top Topics</div><div class="card-body"><div class="chart-meta"><strong>X-axis:</strong> Number of Publications</div><div class="chart-wrap small"><canvas id="topicsChart"></canvas></div></div></section>
+<section class="card"><div class="card-header">Top Authors</div><div class="card-body"><div class="chart-meta"><strong>X-axis:</strong> Number of Publications</div><div class="chart-wrap small"><canvas id="authorsChart"></canvas></div></div></section>
+</div>
+<div class="two-col">
+<section class="card"><div class="card-header">Top Organizations</div><div class="card-body"><div class="chart-meta"><strong>X-axis:</strong> Number of Publications</div><div class="chart-wrap small"><canvas id="orgsChart"></canvas></div></div></section>
+<section class="card"><div class="card-header">Trend Insights (Optional)</div><div class="card-body insight"><p><strong>Trend Direction:</strong> Increasing</p><p><strong>Peak Year:</strong> 2024</p><p><strong>Most Active Topic:</strong> Deep Learning</p><p><strong>Note:</strong> Research output and citations both show consistent growth over the displayed period.</p><p><strong>KG Note:</strong> Two-topic co-occurrence analysis is better suited for Topics or Explorer.</p></div></section>
+</div>
+</div></section>
+<div class="footer-note">Overview is the polished demo page. Other pages remain structured prototypes with clear chart specifications.</div></main>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script><script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script>
+Chart.register(ChartDataLabels);
+const D={pc:[{year:2015,publications:80,citations:320},{year:2016,publications:95,citations:480},{year:2017,publications:120,citations:700},{year:2018,publications:155,citations:980},{year:2019,publications:210,citations:1420},{year:2020,publications:265,citations:2080},{year:2021,publications:340,citations:2950},{year:2022,publications:320,citations:3310},{year:2023,publications:360,citations:3820},{year:2024,publications:390,citations:4210}],ct:[{year:2015,avg:4.0},{year:2016,avg:5.1},{year:2017,avg:5.8},{year:2018,avg:6.3},{year:2019,avg:6.8},{year:2020,avg:7.9},{year:2021,avg:8.7},{year:2022,avg:9.1},{year:2023,avg:9.6},{year:2024,avg:10.2}],topics:[{name:'Deep Learning',value:320},{name:'Computer Vision',value:210},{name:'NLP',value:190},{name:'Reinforcement Learning',value:130},{name:'Graph Learning',value:110}],authors:[{name:'Author A',value:18},{name:'Author B',value:15},{name:'Author C',value:13},{name:'Author D',value:11},{name:'Author E',value:10}],orgs:[{name:'MIT',value:70},{name:'Stanford',value:65},{name:'CMU',value:58},{name:'Oxford',value:46},{name:'Tsinghua',value:42}]};
+new Chart(document.getElementById('mainChart'),{data:{labels:D.pc.map(r=>r.year),datasets:[{type:'bar',label:'Publications',data:D.pc.map(r=>r.publications),backgroundColor:'rgba(125,181,216,0.78)',borderColor:'rgba(125,181,216,1)',borderWidth:1,yAxisID:'y'},{type:'line',label:'Citations',data:D.pc.map(r=>r.citations),borderColor:'#1f2937',backgroundColor:'#1f2937',borderWidth:2,pointRadius:4,tension:0.25,yAxisID:'y1'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'},datalabels:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Publications'}},y1:{beginAtZero:true,position:'right',title:{display:true,text:'Citations'},grid:{drawOnChartArea:false}},x:{title:{display:true,text:'Year'}}}}});
+new Chart(document.getElementById('citationChart'),{type:'line',data:{labels:D.ct.map(r=>r.year),datasets:[{label:'Average Citations per Paper',data:D.ct.map(r=>r.avg),borderColor:'#2e5f88',backgroundColor:'rgba(46,95,136,0.15)',borderWidth:2,pointRadius:4,tension:0.28,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom'},datalabels:{display:false}},scales:{y:{beginAtZero:true,title:{display:true,text:'Average Citations'}},x:{title:{display:true,text:'Year'}}}}});
+function hbar(id,rows,label,color){new Chart(document.getElementById(id),{type:'bar',data:{labels:rows.map(r=>r.name),datasets:[{data:rows.map(r=>r.value),backgroundColor:color,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false},datalabels:{anchor:'end',align:'right',color:'#17212b',font:{weight:'700'},formatter:v=>v}},scales:{x:{beginAtZero:true,title:{display:true,text:label}},y:{ticks:{autoSkip:false}}}}});}
+hbar('topicsChart',D.topics,'Number of Publications','rgba(125,181,216,0.82)');
+hbar('authorsChart',D.authors,'Number of Publications','rgba(46,95,136,0.82)');
+hbar('orgsChart',D.orgs,'Number of Publications','rgba(83,138,181,0.82)');
+document.getElementById('searchBtn').addEventListener('click',()=>{const v=document.getElementById('searchInput').value.trim();if(v){document.getElementById('summaryTopic').textContent=v;document.getElementById('statusBar').textContent=`Prototype search triggered for "${v}". Overview is front-end ready; real back-end data can be connected later.`;}});
+</script></body></html>

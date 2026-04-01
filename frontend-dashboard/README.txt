@@ -1,0 +1,1 @@
+Open frontend/overview.html to start. Overview page is implemented; other pages are styled placeholders ready for future charts and backend integration.
