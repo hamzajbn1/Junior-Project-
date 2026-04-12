@@ -1,5 +1,4 @@
-
-window.OVERVIEW_MOCK_DATA = {
+const OVERVIEW_MOCK_DATA = {
   summary: {
     selected_topic: "Machine Learning",
     from_year: 2015,
@@ -63,3 +62,5 @@ window.OVERVIEW_MOCK_DATA = {
     note: "Research output and citations both show consistent growth over the displayed period."
   }
 };
+
+export default OVERVIEW_MOCK_DATA;

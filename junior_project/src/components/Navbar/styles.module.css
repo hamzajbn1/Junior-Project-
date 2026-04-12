@@ -1,0 +1,103 @@
+/* ── Layout.module.css ── */
+
+.topbar {
+  background: linear-gradient(180deg, var(--primary), var(--primary2));
+  color: #fff;
+  padding: 18px 26px 16px;
+  box-shadow: var(--shadow);
+}
+
+.topbar-inner {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 220px 240px 1fr;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.hero-box, .domain-box, .tabs-box {
+  background: rgba(255, 255, 255, 0.10);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 14px;
+  min-height: 88px;
+}
+
+.hero-title {
+  font-size: 28px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.hero-sub {
+  margin: 0; 
+  font-size: 13px; 
+  opacity: 0.92;
+}
+
+.domain-label {
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+/* Isolated from .search-input so we don't break the rest of the app */
+.domain-select {
+  width: 100%;
+  min-height: 42px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  padding: 0 12px;
+  font-size: 14px;
+}
+
+.tabs-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+}
+
+.tabs {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  overflow: hidden;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+}
+
+.tab-link {
+  display: block;
+  text-align: center;
+  padding: 14px 8px;
+  font-weight: 700;
+  color: var(--text);
+  border-right: 1px solid var(--line);
+  font-size: 15px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.tab-link:last-child {
+  border-right: none;
+}
+
+.active {
+  background: #e8f1f8;
+  color: #12324a;
+}
+
+.page {
+  max-width: 1400px;
+  margin: 22px auto 36px;
+  padding: 0 18px;
+}
+
+/* Mobile rule specifically for the Layout */
+@media (max-width: 1100px) {
+  .topbar-inner {
+    grid-template-columns: 1fr;
+  }
+}
