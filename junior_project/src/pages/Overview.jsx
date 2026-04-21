@@ -91,9 +91,9 @@ function RelationshipChart({ s, p, o }) {
 export default function Overview() {
   // Here is your exact list of relationships to track!
   const relationshipsToTrack = [
-    { s: "machine_learning", p: "uses", o: "random_forest" },
-    { s: "machine_learning", p: "includes", o: "random_forest" },
-    { s: "machine_learning", p: "adopts", o: "Precision" }
+    { s: "machine_learning", p: "usesMethod", o: "random_forest" },
+    { s: "machine_learning", p: "includesMethod", o: "random_forest" },
+    { s: "machine_learning", p: "adaptsMethod", o: "precision_statistic" }
   ];
 
   return (

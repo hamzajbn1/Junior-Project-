@@ -49,6 +49,7 @@ def sparql_paper_ids(entity_S, entity_P, entity_O):
     """
     query = f"""
     PREFIX cskg: <https://w3id.org/cskg/resource/>
+    PREFIX cskgo: <https://w3id.org/cskg/ontology#>
     PREFIX rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
     PREFIX provo: <http://www.w3.org/ns/prov#>
 
@@ -61,7 +62,7 @@ def sparql_paper_ids(entity_S, entity_P, entity_O):
                    provo:wasDerivedFrom ?paperID .
         
         VALUES ?subject {{cskg:{entity_S}}}
-        VALUES ?predicate {{cskg:{entity_P}}}
+        VALUES ?predicate {{cskgo:{entity_P}}}
         VALUES ?object    {{cskg:{entity_O}}}
     }}
     """
