@@ -4,9 +4,17 @@ import requests
 import urllib3
 import time
 import collections
+import ssl
 
+# ---------------------------------------------------------------------------
+# Suppress SSL warnings for the self-signed university certificate
+# ---------------------------------------------------------------------------
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+ssl._create_default_https_context = ssl._create_unverified_context
 
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
 SPARQL_ENDPOINT  = "https://192.167.149.12:9001/sparql/"
 OPENALEX_BASE    = "https://api.openalex.org/works"
 
@@ -14,6 +22,11 @@ OPENALEX_HEADERS = {"User-Agent": "hamza.jbn123@gmail.com"}
 
 app = Flask(__name__)
 CORS(app)   # Allow React (localhost:3000) to call Flask (localhost:5000)
+
+
+# ===========================================================================
+# Section 1 – Core SPARQL helper
+# ===========================================================================
 
 def run_query(sparql_query):
     """
@@ -41,6 +54,11 @@ def run_query(sparql_query):
         batch_ids.append(new_row)
         
     return batch_ids
+
+
+# ===========================================================================
+# Section 2 – Hybrid OpenAlex pipeline
+# ===========================================================================
 
 def sparql_paper_ids(entity_S, entity_P, entity_O):
     """
@@ -82,6 +100,11 @@ def sparql_paper_ids(entity_S, entity_P, entity_O):
     return list(set(batch_ids))
 
 
+
+# ===========================================================================
+# Section 3 – Fetching from openAlex
+# ===========================================================================
+
 def fetch_openalex_works(paper_ids):
     # Will get the result of openalex.
     BATCH_SIZE = 100
@@ -113,6 +136,9 @@ def fetch_openalex_works(paper_ids):
 
     return all_works
 
+# ===========================================================================
+# Section 4 – return lists
+# ===========================================================================
 
 def aggregate_by_year(works):
     """
@@ -124,18 +150,17 @@ def aggregate_by_year(works):
     Returns a list of dicts sorted chronologically:
         [{"year": 2018, "publications": 12, "citations": 450}, ...]
     """
-    # "defaultdict": This dictionary will automatically gives 0 if the key does not exist.
     pub_counts  = collections.defaultdict(int)
     cite_sums   = collections.defaultdict(int)
 
     for work in works:
         year = work.get("publication_year")
         if year is None:
-            continue                          # skip works with no year
+            continue                          
         
         # It counts the paper per year, pub_counts = {2020: 2, 2021: 1, ...}.
         pub_counts[year]  += 1
-        cite_sums[year]   += work.get("cited_by_count", 0) # calculate the citations for the specific year.
+        cite_sums[year]   += work.get("cited_by_count", 0)
 
     rows = []
     for year in pub_counts:
@@ -146,10 +171,13 @@ def aggregate_by_year(works):
         }
         rows.append(new_row)
 
-    # The code means: For every row you check, grab the number inside the 'year' bucket, and use THAT
-    # number to do the sorting.
     rows.sort(key=lambda r: r["year"])
     return rows
+
+
+# ===========================================================================
+# Section 5 – Main publications/citations function (now hybrid)
+# ===========================================================================
 
 def sparql_publications_citations(entity_S, entity_P, entity_O):
     """
@@ -158,35 +186,106 @@ def sparql_publications_citations(entity_S, entity_P, entity_O):
     Returns:
         [{"year": 2018, "publications": 12, "citations": 450}, ...]
     """
-    # Step 1 – SPARQL: get raw OpenAlex Paper IDs from the KG
     paper_ids = sparql_paper_ids(entity_S, entity_P, entity_O)
 
     if not paper_ids:
-        return []   # No IDs found; nothing to query
+        return []  
 
-    # Step 2 – OpenAlex: fetch work metadata in batches
     works = fetch_openalex_works(paper_ids)
 
-    # Step 3 – Python: aggregate into year-level buckets
     return aggregate_by_year(works)
 
+# ===========================================================================
+# Section: Dynamic Relationship Endpoint
+# ===========================================================================
 @app.route("/api/relationship")
 def api_relationship():
     """
     React calls this endpoint with S, P, O variables in the URL.
     Example: /api/relationship?s=MachineLearning&p=uses&o=RandomForest
     """
-    # Grab the variables from the URL
     subject = request.args.get("s")
     predicate = request.args.get("p")
     obj = request.args.get("o")
 
-    # Run your hybrid pipeline
     trend_data = sparql_publications_citations(subject, predicate, obj)
     
-    # Send just this specific timeline back to React
     return jsonify({"data": trend_data})
 
+
+def get_top_authors_via_openalex(entity_S, entity_P, entity_O):
+    """
+    1. Uses your existing SPARQL function to get the Paper IDs.
+    2. Asks OpenAlex who wrote those specific papers.
+    3. Counts them up and returns the top 5.
+    """
+    # Step 1: Get the IDs from the KG (This function already works perfectly!)
+    paper_ids = sparql_paper_ids(entity_S, entity_P, entity_O)
+
+    if not paper_ids:
+        print(f"[DEBUG] No paper IDs found for {entity_S} -> {entity_P} -> {entity_O}")
+        return []
+
+    print(f"[DEBUG] Found {len(paper_ids)} papers. Querying OpenAlex for authors...")
+
+    # Step 2: Fetch author data from OpenAlex
+    BATCH_SIZE = 50
+    author_counts = collections.defaultdict(int)
+
+    for start in range(0, len(paper_ids), BATCH_SIZE):
+        batch = paper_ids[start : start + BATCH_SIZE]
+        id_filter = "|".join(batch)
+
+        try:
+            params = {
+                "filter": f"ids.openalex:{id_filter}",
+                "select": "authorships", # We ONLY want the authors, making it lightning fast
+                "per_page": 50
+            }
+
+            response = requests.get(OPENALEX_BASE, params=params, headers=OPENALEX_HEADERS)
+            response.raise_for_status()
+
+            works = response.json().get("results", [])
+
+            for work in works:
+                for authorship in work.get("authorships", []):
+                    author_name = authorship.get("author", {}).get("display_name")
+                    if author_name:
+                        author_counts[author_name] += 1
+
+        except Exception as e:
+            print(f"[ERROR] Failed author batch lookup: {e}")
+
+        time.sleep(0.1) 
+
+    # Step 4: Convert our dictionary counts into the exact format React wants
+    author_list = []
+    for name, count in author_counts.items():
+        author_list.append({
+            "name": name,
+            "papers": count
+        })
+
+    # Sort the list from highest papers to lowest
+    author_list.sort(key=lambda x: x["papers"], reverse=True)
+
+    # Return only the top 5
+    return author_list[:5]
+
+@app.route("/api/authors/top")
+def api_top_authors():
+    """
+    React calls this endpoint with S, P, O variables in the URL.
+    """
+    subject = request.args.get("s")
+    predicate = request.args.get("p")
+    obj = request.args.get("o")
+
+    # Run the hybrid pipeline
+    top_data = get_top_authors_via_openalex(subject, predicate, obj)
+    
+    return jsonify({"data": top_data})
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

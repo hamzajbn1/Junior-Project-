@@ -108,8 +108,7 @@ export default function Overview() {
           <section className="card">
             <div className="card-header">Architecture Notes</div>
             <div className="card-body insight">
-              <p>Each chart on the right fetches its data completely independently.</p>
-              <p>If one takes 5 seconds, it won't block the others from loading instantly!</p>
+              <p>In progress</p>
             </div>
           </section>
         </div>
