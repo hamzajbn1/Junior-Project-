@@ -22,3 +22,51 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# ---------------------------------------------------------------------------
+# Python backend
+# ---------------------------------------------------------------------------
+
+# Virtual environment. Hundreds of MB of machine-specific binaries: rebuild it
+# with `python -m venv src/venv`, never commit it.
+venv/
+src/venv/
+.venv/
+env/
+
+# Compiled bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Test and coverage output
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ---------------------------------------------------------------------------
+# Secrets and machine-specific configuration
+# ---------------------------------------------------------------------------
+
+# Never commit an OpenAlex key or an endpoint override.
+.env
+.env.*
+!.env.example
+
+# TLS certificate fetched from the CS-KG server by src/fetch_cskg_cert.py.
+# Not secret, but it belongs to one deployment: regenerate it, don't share it.
+*.pem
+src/data/cskg-ca.pem
+
+# ---------------------------------------------------------------------------
+# Generated data
+# ---------------------------------------------------------------------------
+
+# Output of the older CS-KG -> OpenAlex export scripts.
+openalex_results.json
+openalex_results.csv
+
+# Any cached CS-KG concept catalog, if one is ever reintroduced.
+src/data/entity-index.json
+*.tmp
