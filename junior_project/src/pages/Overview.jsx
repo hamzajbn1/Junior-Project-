@@ -141,6 +141,150 @@ function TrendChart({result}){
   );
 }
 
+function countryLabel(code){ 
+  try {
+    return new Intl.DisplayNames(['en'], {type: 'region'}).of(code) || code;
+  } catch {
+    return code;
+  }
+}
+
+function tooltipLines(text){
+  return text.match(/.{1,48}(?:\s|$)|\S{1,48}/g)?.map(line => line.trim()) || [text];
+}
+
+function InsightChart({id, title, rows, metric, description, coverage, cited = false}) {
+  const canvas = useRef(null);
+
+  useEffect(() => {
+    if(!rows.length) return;
+    const chart = new Chart(canvas.current, {
+      type: 'bar',
+      data:{
+        labels: rows.map(row => row.label),
+        datasets: [{
+          label: metric,
+          data: rows.map(row => row.value),
+          backgroundColor: rows.map(row => row.is_other ? '#98aa9e' : '#365e50'),
+          borderRadius: 4,
+          maxBarThickness: 25,
+        }],
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: { callbacks: {
+            title: items => tooltipLines(rows[items[0].dataIndex].label),
+            afterLabel: context => cited
+              ? `Publication year: ${rows[context.dataIndex].publication_year ?? 'Unavailable'}` : '',
+          } },
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            suggestedMax: 1,
+            title: { display: true, text: metric },
+            ticks: { precision: 0 },
+            grid: { color: '#edf0ec' },
+          },
+          y: {
+            grid: { display: false },
+            ticks: {
+              autoSkip: false,
+              callback: function(value) {
+                const label = this.getLabelForValue(value);
+                const limit = this.chart.width < 450 ? 19 : 38;
+                return label.length > limit ? `${label.slice(0, limit - 1)}…` : label;
+              },
+            },
+          },
+        },
+      },
+    });
+    return () => chart.destroy();
+    }, [rows, metric, cited]);
+
+    return (
+      <section className={`trend-card insight-card ${cited ? 'cited-card' : ''}`} aria-labelledby={id}>
+        <div className="chart-heading"><h3 id={id}>{title}</h3></div>
+        {rows.length > 0 ? (
+          <div className="chart-wrap insight-chart-wrap">
+            <canvas ref={canvas} role="img" aria-label={`${title}, measured in ${metric.toLowerCase()}. Full labels and exact values are in the table below.`} />
+          </div>
+        ) : (
+          <p className="insight-empty" role="status">This metadata is unavailable for the supporting papers retrieved.</p>
+        )}
+        <p className="insight-description">{description}</p>
+        {coverage && <p className="insight-coverage">{coverage}</p>}
+        {rows.length > 0 && (
+          <details className="chart-table">
+            <summary>View full {cited ? 'titles' : 'names'} and numbers</summary>
+            <table>
+              <caption className="sr-only">{title}</caption>
+              <thead>
+                <tr><th scope="col">{cited ? 'Paper' : 'Name'}</th>
+                {cited && <th scope="col">Year</th>}
+                <th scope="col">{metric}</th></tr>
+              </thead>
+              <tbody>
+              {rows.map(row => (
+                <tr key={row.id}>
+                  <th scope="row">
+                    {cited && /^https:\/\/openalex\.org\/W\d+$/.test(row.url || '')
+                      ? <a href={row.url} target="_blank" rel="noopener noreferrer">{row.label}</a>
+                      : row.label}
+                  </th>
+                  {cited && <td>{row.publication_year ?? 'Unavailable'}</td>}
+                  <td>{row.value.toLocaleString()}</td>
+                </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
+        )}
+    </section>
+    );
+}
+
+function SupportingInsights({result}){
+  const coverage = result.coverage || {};
+  const missing = (count, field) => count > 0
+    ? `${count} supporting paper${count === 1 ? ' lacks' : 's lack'} available ${field} metadata and ${count === 1 ? 'is' : 'are'} excluded here.` : '';
+  const countryCoverage = [
+    missing(coverage.missing_country_papers, 'affiliation-country'),
+    coverage.partial_country_papers > 0
+     ? `${coverage.partial_country_papers} papers have some authors without country information; counts may be incomplete.` : '',
+    coverage.possibly_truncated_authorship_papers > 0
+      ? `${coverage.possibly_truncated_authorship_papers} papers reach OpenAlex’s 100-author limit; additional countries may be missing.` : '',
+  ].filter(Boolean).join(' ');
+  return(
+    <div className="insights-grid">
+      <InsightChart
+        id="venue-title" title="Top publication venues" metric="Distinct supporting papers"
+        rows={(result.venue_data || []).map(row => ({ ...row, id: row.id || 'other-venues', value: row.papers }))}
+        description="Counts distinct supporting papers by their primary journal or conference source. Other venues combines the remaining known venues."
+        coverage={missing(coverage.missing_venue_papers, 'publication-venue')}
+      />
+      <InsightChart
+        id="country-title" title="Top countries by author affiliation" metric="Distinct supporting papers"
+        rows={(result.country_data || []).map(row => ({ ...row, id: row.country_code || 'other-countries',
+          label: row.is_other ? row.label : countryLabel(row.country_code), value: row.papers }))}
+        description="Each paper counts once for each represented author-affiliation country. Multinational papers appear under multiple countries, so totals can exceed the number of papers. Other countries sums the remaining country counts."
+        coverage={countryCoverage}
+      />
+      <InsightChart
+        id="cited-title" title="Top five most-cited supporting papers" metric="Citations" cited
+        rows={(result.top_cited_papers || []).map(row => ({ ...row, label: row.title, value: row.cited_by_count }))}
+        description="Ranked by OpenAlex citation counts, not views or downloads. Full titles, publication years, and paper links are available below."
+        coverage={missing(coverage.missing_citation_papers, 'citation-count')}
+      />
+    </div>
+  )
+}
+
 export default function Overview() {
   const [concepts, setConcepts] = useState([emptyConcept(), emptyConcept()]);
   const [connections, setConnections] = useState([]);
@@ -397,6 +541,10 @@ export default function Overview() {
               <span>Direct connection · First → Second</span>
             </div>
           </section>
+
+          {status ===  'ready' && ['ok', 'no_years'].includes(result?.status) && (
+            <SupportingInsights result={result} />
+          )}
 
           <p className="results-note">
           A connection is supported by papers that record that exact relationship between both concepts.

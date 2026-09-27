@@ -2,6 +2,7 @@
 """
 from flask import Flask, jsonify, request
 from flask_cors import CORS
+import os
 import requests
 import urllib3
 import collections
@@ -211,36 +212,148 @@ def paper_ids(subject, predicate, obj):
             unusable += 1
     return ids, unusable
 
-def fetch_openalex_years(ids):
-    """Ask OpenAlex for each paper's publication year."""
-    years, failed = {}, set()
+def fetch_openalex_works(ids):
+    """Retrieve one shared collection for all four charts, in batches of 50."""
+    works, failed = {}, set()
     ordered = sorted(ids)
     for start in range (0, len(ordered), 50):
         batch = ordered[start:start + 50]
+        params = {
+            "filter": "ids.openalex:" + "|".join(batch),
+            "select": "id,publication_year,display_name,cited_by_count,primary_location,authorships",
+            "per_page": 50,
+        }
+        if os.environ.get("OPENALEX_API_KEY"):
+            params["api_key"] = os.environ["OPENALEX_API_KEY"]
         try:
             response = requests.get(
                 OPENALEX_BASE,
-                params={
-                    "filter": "ids.openalex:" + "|".join(batch),
-                    "select": "id,publication_year", 
-                    "per_page": 50,
-                },
+                params=params,
                 headers=OPENALEX_HEADERS,
                 timeout=(10, 45),
             )
             response.raise_for_status()
-            for work in response.json().get("results", []):
-                identifier = local_name(work.get("id", ""))
+            results = response.json()["results"]
+            if not isinstance(results, list):
+                raise ValueError("Invalid OpenAlex results")
+
+            for work in results:
+                if not isinstance(work, dict) or not isinstance(work.get("id"), str):
+                    continue
+                identifier = local_name(work["id"])
                 if identifier in batch:
-                    years[identifier] = work.get("publication_year")
+                    works.setdefault(identifier, work)
         except (requests.RequestException, ValueError, KeyError, TypeError):
             failed.update(batch)
+
     if ordered and len(failed) == len(ordered):
         raise ServiceError(
             "Publication details could not be retrieved from OpenAlex. Check the internet connection and try again.",
             502,
         )
-    return years, failed
+    return works, failed
+
+def publication_year(work):
+    year = work.get("publication_year")
+    return year if type(year) is int and 1000 <= year <= datetime.now().year else None
+
+def supporting_insights(references, works, failed, unusable=0):
+    venues, countries, cited = {}, collections.Counter(), []
+
+    coverage = {
+        "requested_papers": len(references),
+        "retrieved_papers": len(references & works.keys()),
+        "unretrieved_papers": len(references - works.keys()),
+        "unusable_references": unusable,
+        "failed_papers": len(failed),
+        "missing_venue_papers": 0,
+        "missing_country_papers": 0,
+        "partial_country_papers": 0,
+        "possibly_truncated_authorship_papers": 0,
+        "missing_citation_papers": 0,
+        "missing_year_papers": 0,
+    }
+
+    for identifier in sorted(references):
+        work = works.get(identifier, {})
+        if publication_year(work) is None:
+            coverage["missing_year_papers"] +=1
+
+        location = work.get("primary_location")
+        source = location.get("source") if isinstance(location, dict) else None
+        source = source if isinstance(source, dict) else {}
+        source_id, label = source.get("id"), source.get("display_name")
+
+        if(isinstance(source_id, str)
+           and re.fullmatch(r"https://openalex\.org/S\d+", source_id)
+           and isinstance(label, str) and label.strip()
+           and source.get("type") != "repository"):
+           venue = venues.setdefault(source_id, {
+               "id": source_id, "label": label.strip(), "papers": 0, "is_other": False,
+           })
+           venue["papers"] +=1
+        else:
+            coverage["missing_venue_papers"] += 1
+
+        paper_countries = set()
+        authorships = work.get("authorships")
+        authorships = authorships if isinstance(authorships, list) else []
+        incomplete = False
+
+        for authorship in authorships:
+            if not isinstance(authorship, dict):
+                incomplete = True
+                continue
+            codes = authorship.get("countries")
+            codes = list(codes) if isinstance(codes, list) else []
+            institutions = authorship.get("institutions")
+
+            if isinstance(institutions, list):
+                codes.extend(item.get("country_code") for item in institutions if isinstance(item, dict))
+            author_countries = {code.upper() for code in codes
+                                if isinstance(code, str) and re.fullmatch(r"[A-Za-z]{2}", code)}
+            if not author_countries:
+                incomplete = True
+            paper_countries.update(author_countries)
+
+        countries.update(paper_countries)
+        if not paper_countries:
+            coverage["missing_country_papers"] += 1
+        elif incomplete:
+            coverage["partial_country_papers"] += 1
+
+        if len(authorships) >= 100:
+            coverage["possibly_truncated_authorship_papers"] += 1
+
+        citations = work.get("cited_by_count")
+        if type(citations) is int and citations >= 0:
+            title = work.get("display_name")
+            title = title.strip() if isinstance(title, str) else ""
+            url = "https://openalex.org/" + identifier
+            cited.append({"id": url, "title": title or f"Untitled paper ({identifier})",
+                          "publication_year": publication_year(work),
+                          "cited_by_count": citations, "url": url})
+        else:
+            coverage["missing_citation_papers"] += 1
+
+    venue_rows = sorted(venues.values(), key=lambda row: (-row["papers"], normalize(row["label"]), row["id"]))
+    venue_data = venue_rows[:5]
+    if len(venue_rows) > 5:
+        venue_data.append({"id": None, "label": "Other venues", "is_other": True,
+                    "papers": sum(row["papers"] for row in venue_rows[5:])})
+    country_rows = sorted(countries.items(), key=lambda row: (-row[1], row[0]))
+    country_data = [{"country_code": code, "papers": count, "is_other": False}
+                for code, count in country_rows[:5]]
+    if len(country_rows) > 5:
+        country_data.append({"country_code": None, "label": "Other countries", "is_other": True,
+                    "papers": sum(count for _, count in country_rows[5:])})
+    cited.sort(key=lambda row: (-row["cited_by_count"], normalize(row["title"]), row["id"]))
+    partial = any(value for key, value in coverage.items()
+            if key not in {"requested_papers", "retrieved_papers"})
+    return {"venue_data": venue_data, "country_data": country_data,
+            "top_cited_papers": cited[:5], "coverage": coverage,
+            "metadata_status": "partial" if partial else "complete"}                                                               
+
 
 def bucket(counts):
     years = sorted(counts)
@@ -267,30 +380,35 @@ def relationship_trend(subject, predicate, obj):
 
     references, unusable = paper_ids(subject, predicate, obj)
     if not references:
-        return {"status": "no_relationship", "data": [], "total_papers": 0, "notes": []}
+        return {"status": "no_years" if unusable else "no_relationship", "data": [],
+                "total_papers": unusable,
+                "notes": [f"{unusable} paper references could not be matched to OpenAlex."] if unusable else [],
+                **supporting_insights(set(), {}, set(), unusable)}
 
-    years, failed = fetch_openalex_years(references)
+    works, failed = fetch_openalex_works(references)
+    insights = supporting_insights(references, works, failed, unusable)
 
     counts = collections.Counter()
     undated = 0
     current_year = datetime.now().year
     for identifier in references:
-        year = years.get(identifier)
-        if isinstance(year, int) and not isinstance(year, bool) and 1000 <= year <= current_year:
+        year = publication_year(works.get(identifier, {}))
+        if year is not None:
             counts[year] += 1
         else:
             undated += 1
 
     notes = []
     if undated:
-        notes.append(f"{undated} of {len(references)} papers have no publication year on record and are not on the chart.")
+        notes.append(f"{undated} of {len(references)} papers have no publication year available in the retrieved metadata and are not on the yearly chart.")
     if unusable:
         notes.append(f"{unusable} paper references could not be matched to OpenAlex.")
     if failed:
         notes.append("Some OpenAlex requests failed, so the counts shown are a lower bound.")
 
     if not counts:
-        return {"status": "no_years", "data": [], "total_papers": len(references) + unusable, "notes": notes}
+        return {"status": "no_years", "data": [], "total_papers": len(references) + unusable,
+                "notes": notes, **insights}
 
     rows, size = bucket(counts)
     if size > 1:
@@ -306,6 +424,7 @@ def relationship_trend(subject, predicate, obj):
         "charted_papers": sum(counts.values()),
         "notes": notes,
         "retrieved_at": datetime.now().isoformat(timespec="seconds"),
+        **insights,
     }
 
 #--------------------------------------------------------------------------
@@ -317,7 +436,7 @@ def api_connections():
     return jsonify({"connections": CONNECTIONS})
 
 @app.get("/api/entities")
-def api_etities():
+def api_entities():
     text = (request.args.get("q") or "").strip()
     if not 2 <= len(text) <=200:
         raise ServiceError("Enter between 2 and 200 characters.", 400)
