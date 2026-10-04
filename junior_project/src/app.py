@@ -10,6 +10,7 @@ import re
 import unicodedata
 from datetime import datetime
 from difflib import SequenceMatcher
+from assistant_planner import create_planner_blueprint 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 app = Flask(__name__)
@@ -44,6 +45,7 @@ CONNECTIONS = [
     {"id": "usesMetric", "label": "Uses a measurement criterion"},
 ]
 ALLOWED_PREDICATES = {item["id"] for item in CONNECTIONS}
+app.register_blueprint(create_planner_blueprint(CONNECTIONS))
 
 PREFIXES = """
 PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>

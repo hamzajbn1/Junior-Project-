@@ -10,7 +10,10 @@ export default function Layout({ children }) {
           <span>Research Trend<span className="brand-second">Explorer</span></span>
         </Link>
         <div className="page-heading">
-          <nav aria-label="Main navigation"><Link to="/" aria-current="page">Overview</Link></nav>
+          <nav aria-label="Main navigation">
+            <Link to="/" aria-current="page">Overview</Link>
+            <Link to="/assistant">Assistant</Link>
+          </nav>
           <span className="domain"><span aria-hidden="true" />Computer Science</span>
         </div>
       </header>
