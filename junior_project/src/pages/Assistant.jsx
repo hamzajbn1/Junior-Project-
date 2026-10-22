@@ -1,215 +1,147 @@
 import { useEffect, useRef, useState } from 'react';
 import '../design/assistant.css';
 
-const examples = [
-'Find papers where machine learning uses random forest from 2018 to 2020.',
-  'Show a yearly chart where machine learning includes random forest.',
-  'Find papers where machine learning customizes random forest.',
-];
+const examples = ['Hello, how are you?', 'Introduce yourself briefly.', 'What can you help me with?'];
 
-const outputLabels = {
-    papers: 'Supporting papers',
-    yearly_trend: 'Papers per year and chart', 
-    relationship: 'Relationship check',
-    explanation: 'Evidence-based explanation'
-};
-
-async function assistantApi(path, options = {}){
-    let response;
-    try {
-        response = await fetch(`/api/assistant/${path}`, options);
-    } catch (error) {
-        if (error.name === 'AbortError') throw error;
-        throw new Error('Cannot reach the planner service. Start the backend, then try again.');
-    }
+async function connectionRequest(path, controller, message) {
+  const timer = setTimeout(() => controller.abort(), 35000);
+  try {
+    const response = await fetch(`/api/assistant/connection/${path}`, {
+      signal: controller.signal,
+      ...(message !== undefined ? {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message }),
+      } : path === 'test' ? { method: 'POST' } : {}),
+    });
     let body;
-    try {body = await response.json();}
-    catch { throw new Error('The planner service sent an unreadable response. Check that the backend is running.'); }
-    if (!response.ok) throw new Error(body.error || 'The planner is unavailable. Please try again.');
+    try { body = await response.json(); }
+    catch { throw new Error('The assistant service returned an unreadable response.'); }
+    if (!response.ok) throw new Error(body.error || 'The assistant service is unavailable.');
+    if (path !== 'status' && (body.status !== 'ok' || typeof body.text !== 'string' || !body.text.trim())) {
+      throw new Error('Gemini returned no usable reply. Please try again.');
+    }
     return body;
-}
-
-function PlanCard({ result }){
-    const plan = result.plan;
-    const ready = plan.status === 'ready';
-    const years = plan.year_from === null && plan.year_to === null ? 'No year limits requested'
-        : `${plan.year_from ?? 'Available start'} – ${plan.year_to ?? 'Available end'}`;
-    
-    return (
-        <article className="plan-card" aria-label="Proposed research plan">
-      <div className="plan-card-top">
-        <span className={`plan-state ${ready ? '' : 'plan-state-question'}`}>
-          {ready ? 'Plan ready for review' : plan.status === 'unsupported' ? 'Unsupported request' : 'Clarification needed'}
-        </span>
-        <span className="plan-duration">{result.elapsed_seconds}s</span>
-      </div>
-      <p className="plan-message">{plan.message}</p>
-      <dl className="plan-intent">
-        <div><dt>First concept</dt><dd>{plan.first_concept || 'Please specify'}</dd></div>
-        <div><dt>Connection</dt><dd>{plan.relationship_label || 'Needs a supported meaning'}</dd></div>
-        <div><dt>Second concept</dt><dd>{plan.second_concept || 'Please specify'}</dd></div>
-        <div><dt>Publication years</dt><dd>{years}</dd></div>
-        <div><dt>Requested output</dt><dd>{outputLabels[plan.requested_output]}</dd></div>
-      </dl>
-      {ready && <>
-        <h3>Proposed tool sequence</h3>
-        <ol className="plan-steps">
-          {plan.steps.map(step => <li key={step.id}>
-            <span className="plan-step-id">{step.id}</span>
-            <div><strong>{step.name}</strong><p>{step.output}</p>
-              <small>{step.requires.length ? `Depends on ${step.requires.join(', ')}` : 'Starts with the researcher’s wording'}</small>
-            </div>
-          </li>)}
-        </ol>
-        <details className="plan-details"><summary>Conditional next actions</summary>
-          <ul>{plan.conditions.map(condition => <li key={condition}>{condition}</li>)}</ul>
-        </details>
-      </>}
-      <p className="plan-disclaimer">Proposed plan only. Concepts and evidence have not been checked in CS-KG. Research tools are not executed in this milestone.</p>
-      <details className="plan-details"><summary>Structured planner output</summary>
-        <pre>{JSON.stringify(plan, null, 2)}</pre>
-      </details>
-    </article>
-    );
+  } catch (error) {
+    if (error.name === 'AbortError') throw new Error('Waiting for Gemini stopped. Please try again.');
+    if (error instanceof TypeError) throw new Error('Cannot reach the assistant service. Make sure the backend is running.');
+    throw error;
+  } finally { clearTimeout(timer); }
 }
 
 export default function Assistant() {
   const [draft, setDraft] = useState('');
-  const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [turns, setTurns] = useState([]);
+  const [connection, setConnection] = useState(null);
+  const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
-  const [connection, setConnection] = useState({ connected: false, message: 'Checking local model…' });
-  const controller = useRef(null);
-  const bottom = useRef(null);
   const input = useRef(null);
+  const scroll = useRef(null);
+  const active = useRef(null);
 
-  useEffect (() => { 
-    const previousTitle = document.title; 
+  useEffect(() => {
+    const previousTitle = document.title;
     document.title = 'AI Assistant · Research Trend Explorer';
-    const statusController = new AbortController();
-    assistantApi('status', { signal: statusController.signal }).then(setConnection).catch(err => {
-      if (err.name !== 'AbortError') setConnection({ connected: false, message: err.message });
-    });
-    return () => {document.title = previousTitle; statusController.abort(); controller.current?.abort(); };
+    const controller = new AbortController();
+    connectionRequest('status', controller)
+      .then(body => { if (!controller.signal.aborted) setConnection(body); })
+      .catch(err => { if (!controller.signal.aborted) setError(err.message); });
+    return () => {
+      document.title = previousTitle;
+      controller.abort();
+      active.current?.abort();
+    };
   }, []);
 
-  useEffect(() => { bottom.current?.scrollIntoView({ block: 'end'});}, [messages, loading]);
+  useEffect(() => {
+    if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight;
+  }, [turns, busy, error]);
 
-  async function checkConnection() {
-    setConnection({ connected: false, message: 'Checking local model…' });
-    try { setConnection(await assistantApi('status')); }
-    catch (err) { setConnection({ connected: false, message: err.message }); }
+  function newConversation() {
+    active.current?.abort();
+    active.current = null;
+    setTurns([]); setDraft(''); setError(''); setBusy('');
+    input.current?.focus();
   }
 
-  async function submit(event) {
-    event.preventDefault();
-    const question = draft.trim();
-    if (!question || loading) return;
-    const history = messages.flatMap(message => message.result ? [
-      {role: 'user', content: message.question},
-      {role: 'assistant', content: JSON.stringify({ ...message.result.plan, steps: undefined, conditions: undefined })},  
-    ] : []).slice(-2);
-    const abort = new AbortController();
-    controller.current = abort;
-    setLoading(true);
-    setError('');
-    setMessages(previous => [...previous, { question, pending: true }]);
-    setDraft('');
+  async function run(path) {
+    if (active.current) return;
+    const text = draft.trim();
+    if (path === 'message' && !text) return;
+    const controller = new AbortController();
+    active.current = controller;
+    setBusy(path); setError('');
+    if (path === 'message') {
+      setTurns(current => [...current, { message: text, reply: '', failed: false }]);
+      setDraft('');
+    }
     try {
-      const result = await assistantApi('plan', { method: 'POST', signal: abort.signal,
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question, history }) });
-      setMessages(previous => previous.map((message, i) => i === previous.length - 1 ? { question, result } : message));
-      setConnection({ connected: true, model: result.model, message: 'Local model available' });
+      const body = await connectionRequest(path, controller, path === 'message' ? text : undefined);
+      if (active.current !== controller) return;
+      setConnection({ configured: true, connection_verified: true, model: body.model });
+      if (path === 'message') {
+        setTurns(current => current.map((turn, index) => index === current.length - 1 ? { ...turn, reply: body.text } : turn));
+      }
     } catch (err) {
-      if (err.name !== 'AbortError') {
-        setError(err.message);
-        setDraft(question);
-        setMessages(previous => previous.map((message, i) => i === previous.length - 1 ? { question, failed: true } : message));
+      if (active.current !== controller) return;
+      setError(err.message);
+      if (path === 'message') {
+        setTurns(current => current.map((turn, index) => index === current.length - 1 ? { ...turn, failed: true } : turn));
+        setDraft(current => current || text);
       }
     } finally {
-      if (controller.current === abort) { setLoading(false); controller.current = null; }
+      if (active.current === controller) { active.current = null; setBusy(''); }
     }
   }
-  
-  function newConversation() {
-    if (loading) return;
-    setMessages([]); setDraft(''); setError(''); input.current?.focus();
-  }
+
+  const connectionLabel = connection?.connection_verified ? 'Connected'
+    : connection?.configured ? 'Ready to send'
+    : connection ? 'Setup required' : 'Connection not checked';
 
   return (
     <div className="assistant-layout">
       <aside className="assistant-sidebar">
         <span className="eyebrow">RESEARCH ASSISTANT</span>
-        <h1>Plan your search.</h1>
-        <p>Describe two concepts and the connection you want to investigate.</p>
-        <button className="assistant-new" onClick={newConversation} disabled={loading}><span aria-hidden="true">＋</span> New conversation</button>
-        <div className="assistant-stage"><span className="eyebrow">CURRENT MILESTONE</span><h2>Orchestrator / Planner</h2>
-          <p>Interprets your request and proposes the tools and steps. Evidence retrieval comes in a later milestone.</p>
+        <h1>Explore your research.</h1>
+        <p>Start with a message to your AI assistant.</p>
+        <button className="assistant-new" type="button" onClick={newConversation}><span aria-hidden="true">＋</span> New conversation</button>
+        <div className="assistant-stage"><span className="eyebrow">ASSISTANT STATUS</span><h2>{connectionLabel}</h2>
+          <p>Send a message to receive a reply from Gemini.</p>
         </div>
-        <div className="assistant-model" aria-live="polite"><span className={`assistant-model-dot ${connection.connected ? 'online' : ''}`} aria-hidden="true" />
-          <div><strong>{connection.model || 'Local Qwen model'}</strong><p>{connection.message}</p>
-            <button onClick={checkConnection} className="text-button" type="button">Check connection</button>
+        <div className="assistant-model" aria-live="polite"><span className={`assistant-model-dot ${connection?.connection_verified ? 'online' : ''}`} aria-hidden="true" />
+          <div><strong>AI Assistant</strong><p>{connection?.model || 'Gemini'} · {connectionLabel}</p>
+            <button disabled={Boolean(busy)} className="text-button" type="button" onClick={() => run('test')}>{busy === 'test' ? 'Checking…' : 'Check connection'}</button>
           </div>
         </div>
       </aside>
       <section className="assistant-chat" aria-label="AI Assistant conversation">
-        <header className="assistant-chat-header"><span>AI Assistant</span><span className="assistant-milestone">Planning milestone</span></header>
-        <div className="assistant-scroll">
-          {messages.length === 0 ? <div className="assistant-welcome">
+        <header className="assistant-chat-header"><span>AI Assistant</span><span className="assistant-milestone">{connectionLabel}</span></header>
+        <div className="assistant-scroll" ref={scroll}>
+          {!turns.length ? <div className="assistant-welcome">
             <div className="assistant-symbol" aria-hidden="true">↗</div>
-            <span className="eyebrow">FROM A QUESTION TO A PLAN</span>
-            <h2>What would you like to research?</h2>
-            <p>Write the connection in your own words. I’ll identify the concepts, interpret the relationship, and prepare a proposed research plan.</p>
-            <div className="assistant-examples">{examples.map(example => <button key={example} onClick={() => { setDraft(example); input.current?.focus(); }}>{example}<span aria-hidden="true">↗</span></button>)}</div>
+            <span className="eyebrow">AI ASSISTANT</span>
+            <h2>Start a conversation.</h2>
+            <p>Try “Hello, how are you?” to get a reply from Gemini.</p>
+            <div className="assistant-examples">{examples.map(example => <button type="button" key={example} onClick={() => { setDraft(example); input.current?.focus(); }}>{example}<span aria-hidden="true">↗</span></button>)}</div>
           </div> : <div className="assistant-messages">
-            {messages.map((message, index) => <div className="assistant-turn" key={index}>
-              <div className="assistant-user"><span className="sr-only">Researcher: </span>{message.question}</div>
-              {message.result && <div className="assistant-answer"><span className="assistant-answer-label">RESEARCH ASSISTANT</span><PlanCard result={message.result} /></div>}
-              {message.failed && <p className="assistant-failed">No plan was produced. Edit or resend your request below.</p>}
+            {turns.map((turn, index) => <div className="assistant-turn" key={index}>
+              <div className="assistant-user">{turn.message}</div>
+              {turn.reply && <div className="assistant-answer"><span className="assistant-answer-label">AI ASSISTANT</span><p className="assistant-reply">{turn.reply}</p></div>}
+              {turn.failed && <p className="assistant-failed">No reply received. Your message is available below to try again.</p>}
             </div>)}
-            {loading && <div className="assistant-wait" role="status"><span className="spinner" aria-hidden="true" /><span>Qwen is preparing your plan…<small>The first response may take longer while the model loads.</small></span></div>}
           </div>}
-          <div ref={bottom} />
+          {busy && <div className="assistant-wait" role="status"><span className="spinner" aria-hidden="true" />{busy === 'test' ? 'Checking the Gemini connection…' : 'Waiting for Gemini…'}</div>}
         </div>
         <div className="assistant-compose-area">
           {error && <p className="assistant-error" role="alert">{error}</p>}
-          <form onSubmit={submit} className="assistant-composer">
-            <label className="sr-only" htmlFor="research-question">Research question</label>
+          <form onSubmit={event => { event.preventDefault(); run('message'); }} className="assistant-composer">
+            <label className="sr-only" htmlFor="research-question">Message</label>
             <textarea id="research-question" ref={input} value={draft} maxLength={2000} rows={2}
-              placeholder="Find papers where machine learning uses random forest…"
-              onChange={event => setDraft(event.target.value)}
-              onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form.requestSubmit(); } }}
-              aria-describedby="assistant-input-note" />
-            <button type="submit" disabled={loading || !draft.trim()} aria-label="Create research plan">{loading ? '…' : '↑'}</button>
+              placeholder="Type a message…" onChange={event => setDraft(event.target.value)} aria-describedby="assistant-input-note" />
+            <button type="submit" disabled={Boolean(busy) || !draft.trim()} aria-label="Send message">↑</button>
           </form>
-          <p id="assistant-input-note" className="assistant-input-note">Enter to send · Shift + Enter for a new line. Conversation stays in this page session; it is not saved.</p>
+          <p id="assistant-input-note" className="assistant-input-note">Each message is sent independently. This conversation is not saved.</p>
         </div>
       </section>
     </div>
   );
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 
 export default function Layout({ children }) {
 
@@ -11,8 +11,9 @@ export default function Layout({ children }) {
         </Link>
         <div className="page-heading">
           <nav aria-label="Main navigation">
-            <Link to="/" aria-current="page">Overview</Link>
-            <Link to="/assistant">Assistant</Link>
+            <NavLink to="/" aria-current="page">Overview</NavLink>
+            <NavLink to="/assistant">Assistant</NavLink>
+            <NavLink to="/agent2-test" style={{fontSize: 13}}>Agent 2 Test</NavLink>
           </nav>
           <span className="domain"><span aria-hidden="true" />Computer Science</span>
         </div>
