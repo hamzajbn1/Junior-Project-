@@ -70,3 +70,6 @@ openalex_results.csv
 # Any cached CS-KG concept catalog, if one is ever reintroduced.
 src/data/entity-index.json
 *.tmp
+
+# Local assistant result database and SQLite transaction files.
+/data/*.sqlite3*
