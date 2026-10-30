@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import Agent2SavedResults from '../components/Agent2SavedResults';
+import Agent3Result from '../components/Agent3Result';
 
 async function researchApi(path, options = {}) {
   let response;
@@ -27,6 +29,7 @@ export default function Agent2Test() {
   const [resuming, setResuming] = useState(false);
   const [error, setError] = useState('');
   const submitting = useRef(null);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -102,6 +105,21 @@ export default function Agent2Test() {
     }
   }
 
+  async function retrySave() {
+    setSaving(true);
+    setError('');
+    const controller = new AbortController();
+    submitting.current = controller;
+    try {
+      const storage = await researchApi(`agent2/tasks/${taskId}/save`, { method: 'POST', signal: controller.signal });
+      if (!controller.signal.aborted) setSnapshot(previous => ({ ...previous, storage }));
+    } catch (error) {
+      if (!controller.signal.aborted) setError(error.message);
+    } finally {
+      if (!controller.signal.aborted) setSaving(false);
+    }
+  }
+
   const result = snapshot?.result;
   const ambiguous = Object.entries(result?.resolution || {}).filter(([, value]) => !value.selected && value.candidates.length);
   const canResume = ambiguous.every(([side]) => selections[side]);
@@ -111,7 +129,7 @@ export default function Agent2Test() {
       <h1 id="agent2-title">Agent 2 Test</h1>
       <p>Live CS-KG → OpenAlex → counts → validation. LangGraph workflow; no LLM.</p>
       <form onSubmit={submit} style={{ maxWidth: 640 }}>
-        <fieldset disabled={busy || resuming}>
+        <fieldset disabled={busy || resuming || saving}>
           <legend>Research request</legend>
           <p><label htmlFor="a2-first">First concept</label>
             <input id="a2-first" required minLength={2} maxLength={200} value={form.first_concept}
@@ -135,6 +153,11 @@ export default function Agent2Test() {
       </form>
       <p role="status" aria-live="polite">{busy ? 'Research is running. Progress appears below.' : snapshot ? `Status: ${snapshot.status}` : 'Ready. No research request has run yet.'}</p>
       {error && <p role="alert">{error}</p>}
+      {snapshot?.storage?.status === 'saved' && <p role="status">Saved in SQLite at {snapshot.storage.saved_at}. Reload all saved results below to inspect the stored copy.</p>}
+      {snapshot?.storage?.status === 'failed' && <div role="alert">
+        <p>Research status: {snapshot.status}. SQLite saving failed: {snapshot.storage.error}</p>
+        <button type="button" disabled={saving} onClick={retrySave}>{saving ? 'Saving…' : 'Retry saving this result'}</button>
+      </div>}
 
       {snapshot?.events.length > 0 && <details open><summary>Step progress and attempts</summary>
         <ol>{snapshot.events.map((event, index) => <li key={index}>
@@ -151,7 +174,7 @@ export default function Agent2Test() {
           {side === 'first' ? 'First' : 'Second'} concept: {value.selected.label} — <code>{value.selected.id}</code>
         </p>)}
         {result.relationship?.predicate && <p>Directed connection: {result.relationship.subject} → {result.relationship.predicate} → {result.relationship.object}</p>}
-        {snapshot.status === 'needs_clarification' && <fieldset disabled={busy || resuming}>
+        {snapshot.status === 'needs_clarification' && <fieldset disabled={busy || resuming || saving}>
           <legend>Select the intended concepts</legend>
           {ambiguous.map(([side, value]) => <p key={side}>
             <label htmlFor={`a2-choice-${side}`}>{side === 'first' ? 'First' : 'Second'} concept</label>
@@ -182,6 +205,8 @@ export default function Agent2Test() {
         {result.source && <p>Sources: CS-KG ({result.source.graph}), OpenAlex. Retrieved: {result.retrieved_at}. Elapsed: {result.elapsed_seconds}s.</p>}
         <details><summary>Full result JSON, including supporting IDs</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{JSON.stringify(result, null, 2)}</pre></details>
       </section>}
+      {result && <Agent3Result key={result.result_id || taskId} taskId={taskId} result={result} />}
+      <Agent2SavedResults savedAt={snapshot?.storage?.saved_at} />
     </section>
   );
 }

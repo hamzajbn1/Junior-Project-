@@ -1,4 +1,4 @@
-"""Plain test-page API; bounded, ephemeral local jobs with live progress."""
+"""Test-page API: bounded live jobs plus durable SQLite result snapshots."""
 import copy
 import os
 import threading
@@ -8,6 +8,7 @@ from uuid import uuid4
 
 from flask import Blueprint, jsonify, request
 from shared import RunContext, ServiceError
+from shared.result_store import RESULT_STORE, TERMINAL_STATUSES
 from .research_schemas import parse_request
 
 
@@ -35,7 +36,7 @@ class ResearchJobs:
                                retryable=False, code="busy")
         identifier = str(uuid4())
         job = {"task_id": identifier, "status": "running", "request": parsed, "events": [],
-               "result": None, "state": None, "updated": time.monotonic()}
+               "result": None, "state": None, "storage": {"status": "not_saved"}, "updated": time.monotonic()}
 
         def progress(event):
             with self.lock:
@@ -68,6 +69,7 @@ class ResearchJobs:
                 job["state"] = state if result["status"] == "needs_clarification" else None
                 if job["state"] is None:
                     job["context"].cache.clear()
+                    self.save(identifier)
         except Exception:
             # Never return raw provider bodies, credentials, or private graph state.
             with self.lock:
@@ -78,6 +80,7 @@ class ResearchJobs:
                                  "validation": {"passed": False}, "uses_llm": False,
                                  "error": {"code": "internal_error", "message": "Research stopped because of an unexpected backend error. Check the backend console."},
                                  "events": list(job["events"])}
+                self.save(identifier)
             import logging
             # No exception payload is logged: transport exceptions can include keys.
             logging.getLogger(__name__).error("Agent 2 task %s stopped with an internal error.", identifier)
@@ -86,6 +89,20 @@ class ResearchJobs:
                 job["updated"] = time.monotonic()
             self.slots.release()
 
+    def save(self, identifier):
+        with self.lock:
+            job = self.jobs.get(identifier)
+            if job is None:
+                raise ServiceError("This test run is no longer available.", 404, code="task_not_found")
+            if job["status"] not in TERMINAL_STATUSES:
+                raise ServiceError("Only finished research runs can be saved.", 409, code="not_finished")
+            try:
+                job["storage"] = RESULT_STORE.save(job)
+            except ServiceError as error:
+                # Saving has its own status and never invalidates the research result.
+                job["storage"] = {"status": "failed", "error": str(error)}
+            return copy.deepcopy(job["storage"])
+
     def snapshot(self, identifier):
         self.cleanup()
         with self.lock:
@@ -93,7 +110,7 @@ class ResearchJobs:
             if job is None:
                 raise ServiceError("This test run expired or the backend restarted. Start a new run.", 404,
                                    retryable=False, code="task_not_found")
-            return copy.deepcopy({key: job[key] for key in ("task_id", "status", "request", "events", "result")})
+            return copy.deepcopy({key: job[key] for key in ("task_id", "status", "request", "events", "result", "storage")})
 
     def resume(self, identifier, body):
         if not isinstance(body, dict) or not isinstance(body.get("selections"), dict) or not body["selections"]:
@@ -119,6 +136,7 @@ class ResearchJobs:
             job["context"].started = time.monotonic()
             job["status"] = "running"
             job["result"] = None
+            job["storage"] = {"status": "not_saved"}
             self.pool.submit(self.execute, job["task_id"], dict(selections))
 
 
@@ -145,5 +163,14 @@ def create_research_blueprint():
     def resume_task(identifier):
         JOBS.resume(identifier, request.get_json(silent=True))
         return jsonify({"task_id": identifier, "status": "running"}), 202
+
+    @routes.get("/api/agent2/saved-results")
+    def saved_results():
+        return jsonify(RESULT_STORE.load_all())
+
+    @routes.post("/api/agent2/tasks/<identifier>/save")
+    def save_result(identifier):
+        storage = JOBS.save(identifier)
+        return jsonify(storage), 503 if storage["status"] == "failed" else 200
 
     return routes

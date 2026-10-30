@@ -10,8 +10,8 @@ from pathlib import Path
 import requests
 
 API_URL = 'https://generativelanguage.googleapis.com/v1beta/interactions'
-DEFAULT_MODEL = 'gemini-3.8-flash'
-TIMEOUT_SECONDS = 30
+DEFAULT_MODEL = 'gemini-3.5-flash-lite'
+TIMEOUT_SECONDS = 240
 MAX_RESPONSE_BYTES = 1024 * 1024
 ENV_PATH = Path(__file__).resolve().parents[2] / '.env'
 _active_requests = threading.BoundedSemaphore(2)
@@ -26,7 +26,6 @@ class GeminiError(Exception):
         self.status = status
 
 
-# Reads the API key and model name from your ".env" file.
 def _configuration():
     values = {}  
     path = ENV_PATH
@@ -38,8 +37,8 @@ def _configuration():
         line = line.strip()
         if not line or line.startswith('#') or '=' not in line:
             continue
-        name, value = line.split('=', 1) 
-        name, value = name.strip(), value.strip()  
+        name, value = line.split('=', 1)  
+        name, value = name.strip(), value.strip() 
         if name not in ('GEMINI_API_KEY', 'GEMINI_MODEL'):
             continue
         if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
@@ -47,7 +46,7 @@ def _configuration():
         values[name] = value
     key = os.environ.get('GEMINI_API_KEY', values.get('GEMINI_API_KEY', '')).strip()
     model = os.environ.get('GEMINI_MODEL', values.get('GEMINI_MODEL', DEFAULT_MODEL)).strip()
-    if not re.fullmatch(r'gemini-[a-zA-Z0-9.-]{1,100}', model):  # Checks whether the model name matches the permitted format.
+    if not re.fullmatch(r'gemini-[a-zA-Z0-9.-]{1,100}', model): 
         raise GeminiError('configuration_error', 'Set GEMINI_MODEL to a valid Gemini model name.', 503)
     if key.casefold() in ('your_key', 'your_api_key', 'your_gemini_api_key', 'replace_me'):
         key = ''
@@ -64,14 +63,14 @@ def configuration_status():
         'configured': bool(key),
         'connection_verified': False, 
         'model': model,
-        'timeout_seconds': TIMEOUT_SECONDS,  
+        'timeout_seconds': TIMEOUT_SECONDS, 
         'message': 'Key configured. Run the connection check to verify access.' if key else
                    'Add GEMINI_API_KEY to Junior Test/.env to enable the connection.',
     }
 
 
 def _timeout_error():
-    return GeminiError('timeout', 'The Gemini request timed out. Waiting stops after at most 30 seconds; try again.', 504)
+    return GeminiError('timeout', 'The Gemini request timed out. Waiting stops after at most 4 minutes; try again.', 504)
 
 
 # This function is responsible for communicating directly with the Google Gemini API.
@@ -80,8 +79,13 @@ def _perform_request(key, model, prompt, system_instruction, max_output_tokens, 
         'model': model,
         'input': prompt,
         'store': False,  
-        'generation_config': {'max_output_tokens': max_output_tokens},
+        'generation_config': {
+            'max_output_tokens': max_output_tokens,
+            'thinking_level': 'minimal' if model == 'gemini-3.5-flash-lite' else 'low',
+        },
     }
+
+    # Checks whether extra instructions were provided.
     if system_instruction:
         payload['system_instruction'] = system_instruction
     
@@ -92,7 +96,7 @@ def _perform_request(key, model, prompt, system_instruction, max_output_tokens, 
         with requests.post(API_URL,  
                         headers={'x-goog-api-key': key}, 
                         json=payload, 
-                        timeout=(min(5, remaining), min(25, remaining)),
+                        timeout=(min(5, remaining), remaining),
                         allow_redirects=False, 
                         stream=True) as response: 
 
@@ -105,12 +109,14 @@ def _perform_request(key, model, prompt, system_instruction, max_output_tokens, 
                 raise GeminiError('quota_exceeded', 'Gemini rate or usage quota reached. Check AI Studio limits and try again later.', 429)
             if status == 400: 
                 raise GeminiError('request_rejected', 'Gemini rejected this request. Check model support and API settings.', 502)
+            if status in (502, 503, 504):
+                raise GeminiError('service_unavailable', 'The configured Gemini model is temporarily unavailable. Try again later or use another model.', 503)
             if not 200 <= status < 300: 
                 raise GeminiError('provider_error', 'Gemini is unavailable or returned an unexpected response. Try again later.', 502)
 
             chunks, size = [], 0  
             for chunk in response.iter_content(chunk_size=8192): 
-                if time.monotonic() >= deadline: 
+                if time.monotonic() >= deadline:
                     raise _timeout_error()
                 size += len(chunk) 
                 if size > MAX_RESPONSE_BYTES: 
@@ -132,7 +138,7 @@ def _perform_request(key, model, prompt, system_instruction, max_output_tokens, 
     if not isinstance(body, dict) or body.get('status') != 'completed':
         raise GeminiError('incomplete_response', 'Gemini did not return a completed answer.', 502)
     
-    texts = [] 
+    texts = []  
     steps = body.get('steps') 
     if isinstance(steps, list):
         for step in steps:
@@ -155,12 +161,15 @@ def _perform_request(key, model, prompt, system_instruction, max_output_tokens, 
 
 def generate_text(prompt, *, system_instruction=None, max_output_tokens=2048):
 
+    # Prevent empty, invalid, or excessively long prompts from being sent to Gemini.
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt) > 20000:
         raise GeminiError('invalid_input', 'Provide a prompt between 1 and 20,000 characters.', 400)
     
+    # Verify that optional instructions are valid before sending them to Gemini.
     if system_instruction is not None and (not isinstance(system_instruction, str) or len(system_instruction) > 20000):
         raise GeminiError('invalid_input', 'System instructions must be text of at most 20,000 characters.', 400)
 
+    # Make sure the requested output limit is a valid integer between 32 and 4096.
     if type(max_output_tokens) is not int or not 32 <= max_output_tokens <= 4096:
         raise GeminiError('invalid_input', 'Output limit must be an integer between 32 and 4,096 tokens.', 400)
     key, model = _configuration()
@@ -168,8 +177,8 @@ def generate_text(prompt, *, system_instruction=None, max_output_tokens=2048):
         raise GeminiError('not_configured', 'Add GEMINI_API_KEY to Junior Test/.env before checking the connection.', 503)
     if not _active_requests.acquire(blocking=False):
         raise GeminiError('busy', 'The Gemini connection is busy. Try again after the current requests finish.', 503)
-    started = time.monotonic() 
-    deadline = started + TIMEOUT_SECONDS
+    started = time.monotonic() # starting the timer.
+    deadline = started + TIMEOUT_SECONDS # Calculates the time when the request deadline expires.
     result_queue = queue.Queue(maxsize=1)
 
     # Defines an inner function containing the worker's tasks. It does not execute it yet.
@@ -205,19 +214,15 @@ def check_connection():
     return generate_text('Reply with only: Gemini connection is working.', max_output_tokens=2048)
 
 if __name__ == '__main__':
-    import argparse  
+    import argparse 
     parser = argparse.ArgumentParser(description='Check the server-side Gemini connection.')
     parser.add_argument('--check', 
                         action='store_true', 
                         help='Make one real Gemini request; consumes API quota.')
-    args = parser.parse_args() 
+    args = parser.parse_args() # 
     try:
         print(json.dumps(check_connection() if args.check else configuration_status(), indent=2))
     except GeminiError as error:
         print(json.dumps({'status': 'error', 'code': error.code, 'error': str(error)}, indent=2))
         raise SystemExit(1)
 
-
-
-
-    

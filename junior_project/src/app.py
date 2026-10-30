@@ -127,6 +127,9 @@ def api_top_authors():
 from agent2.research_routes import create_research_blueprint
 app.register_blueprint(create_research_blueprint())
 
+from agent3.explanation_routes import create_explanation_blueprint
+app.register_blueprint(create_explanation_blueprint())
+
 if __name__ == "__main__":
     # threaded=True so one slow graph query does not block the next request.
     app.run(host="127.0.0.1", port=5000, threaded=True)

@@ -4,7 +4,7 @@ import '../design/assistant.css';
 const examples = ['Hello, how are you?', 'Introduce yourself briefly.', 'What can you help me with?'];
 
 async function connectionRequest(path, controller, message) {
-  const timer = setTimeout(() => controller.abort(), 35000);
+  const timer = setTimeout(() => controller.abort(), 245000);
   try {
     const response = await fetch(`/api/assistant/connection/${path}`, {
       signal: controller.signal,
