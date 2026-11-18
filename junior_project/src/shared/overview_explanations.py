@@ -29,8 +29,10 @@ CHARTS = {
     },
     "citations": {
         "field": "top_cited_papers", "metric": "OpenAlex citations per supporting paper",
-        "prompt": "Give a general explanation of the displayed most-cited supporting papers. Use their full titles "
-                  "and citation counts where useful. Their publication years are metadata, not yearly citation counts. "
+        "prompt": "Summarize the displayed citation ranking in one paragraph of 80-110 words. "
+                  "Mention only the leading paper, or the top two if useful, with their citation counts; "
+                  "do not enumerate every paper or repeat all full titles. Refer to the chart labels for the remaining entries. "
+                  "Publication years are metadata, not yearly citation counts. "
                   "Citations are not downloads, views, or proof of research quality. The ranking covers only the "
                   "retrieved supporting papers. Qualify missing citation metadata.",
     },

@@ -1,6 +1,7 @@
 """A bounded Agent 3 workflow: backend facts/chart, one Gemini call, response formatting."""
 import copy
 import json
+import re
 
 from ai_connection import model_client
 from shared import ServiceError
@@ -18,8 +19,8 @@ With no specific question, write a short natural general explanation of the over
 pattern and the most useful highs, lows, or changes. Avoid mechanically listing every fact.
 With a question, answer precisely what the user requested. Give a general explanation
 as well only if requested. Say when the available data cannot answer the question.
-By default, write one balanced, readable paragraph, usually about 80-120 words in 4-6 sentences.
-Treat this as a flexible target, not a strict limit. Explain the main trend and the most useful supporting values or changes without listing every year.
+By default, write one readable paragraph of about 80-110 words in 3-5 sentences; do not exceed 110 words.
+Explain the main trend and only the most useful supporting values or changes. Do not list every year or repeat chart labels.
 Include a brief coverage caveat when relevant, without repeating warnings in detail or adding unnecessary calculations.
 For a simple specific question, answer directly and use fewer words when sufficient.
 If the user asks for a long, detailed, or thorough explanation, provide the requested depth and do not apply the default word or sentence target.
@@ -29,10 +30,24 @@ Return plain text only, without JSON, headings, bullet points, or field labels."
 
 def explain_chart(data, *, guidance, question=None, provider="auto"):
     """One Agent 3 model call, shared by annual research and Overview explanations."""
+    # Inspect the user's question only, never chart labels or metadata, for length preferences.
+    request = question or ""
+    wants_brief = re.search(r"\b(?:short(?:er)?|brief|concise|summary)\b", request, re.IGNORECASE)
+    wants_detail = not wants_brief and re.search(
+        r"\b(?:long(?:er)?|detailed|thorough|comprehensive)\s+(?:explanation|analysis|answer|response|description)\b"
+        r"|\b(?:in detail|more detail|in[- ]depth|thoroughly|expand|elaborate)\b", request, re.IGNORECASE)
+    token_limit = 2048 if wants_detail else 320
+    length_guidance = (
+        "The user explicitly requested detail. Provide the requested depth; the default word limit does not apply."
+        if wants_detail else
+        "Keep the explanation within 110 words and finish complete sentences within the available output budget. "
+        "Select key facts instead of enumerating every chart entry."
+    )
     prompt = json.dumps({"chart_data": data, "question": question}, ensure_ascii=False)
     try:
         reply = model_client.generate_text(
-            prompt, system_instruction=SYSTEM_INSTRUCTION + "\n" + guidance, max_output_tokens=2048, provider=provider)
+            prompt, system_instruction=SYSTEM_INSTRUCTION + "\n" + guidance + "\n" + length_guidance,
+            max_output_tokens=token_limit, provider=provider)
         return {"status": "complete", "explanation": reply["text"],
                 "generated_by_llm": True, "model": reply["model"], "provider": reply.get("provider")}
     except (model_client.ModelError, ServiceError) as error:
