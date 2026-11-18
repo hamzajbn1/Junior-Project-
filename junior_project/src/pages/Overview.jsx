@@ -1,9 +1,10 @@
-import {useEffect, useRef, useState} from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Chart, registerables } from 'chart.js';
+import OverviewExplanation from '../components/OverviewExplanation';
 
 Chart.register(...registerables);
 
-async function api (path, signal) {
+async function api(path, signal) {
   let response;
   try {
     response = await fetch(`/api/${path}`, { signal });
@@ -21,16 +22,16 @@ async function api (path, signal) {
   return body;
 }
 
-const emptyConcept = () => ({ text: '', selected: null, candidates: [], status: 'idle', message: ''});
+const emptyConcept = () => ({ text: '', selected: null, candidates: [], status: 'idle', message: '' });
 
 /* Searching costs several seconds, so it runs when the researcher asks for it
-- Enter or the Search button never on every keystroke. */
-function ConceptInput({ id, label, placeholder, value, onEdit, onSearch, onSelect}) {
+   - Enter or the Search button - never on every keystroke. */
+function ConceptInput({ id, label, placeholder, value, onEdit, onSearch, onSelect }) {
   return (
     <div className="concept-field">
       <label htmlFor={id}>{label}</label>
       <div className="concept-row">
-        <input 
+        <input
           id={id}
           value={value.text}
           placeholder={placeholder}
@@ -41,25 +42,25 @@ function ConceptInput({ id, label, placeholder, value, onEdit, onSearch, onSelec
             if (event.key === 'Enter') { event.preventDefault(); onSearch(); }
           }}
         />
-        <button 
+        <button
           type="button"
           className="find-button"
           onClick={onSearch}
           disabled={value.text.trim().length < 2 || value.status === 'loading'}
         >
-          {value.status === 'loading' ? "...": "Search"}
+          {value.status === 'loading' ? '…' : 'Search'}
         </button>
       </div>
-      
+
       <div
         id={`${id}-status`}
         className={`field-status ${value.status === 'error' ? 'error-text' : ''}`}
-        aria-live="polite"  
+        aria-live="polite"
       >
-        {value.selected 
+        {value.selected
           ? <span className="resolved">✓ {value.selected.label}<small>{value.selected.name}</small></span>
-          : value.status === 'loading' ? 'Searching the knowledge graph...'
-          : value.message || 'Type a concept, then press Enter'}
+          : value.status === 'loading' ? 'Searching the knowledge graph…'
+          : value.message || 'Type a concept, then press Enter.'}
       </div>
 
       {!value.selected && value.candidates.length > 0 && (
@@ -78,7 +79,7 @@ function ConceptInput({ id, label, placeholder, value, onEdit, onSearch, onSelec
   );
 }
 
-function TrendChart({result}){
+function TrendChart({ result }) {
   const canvas = useRef(null);
 
   useEffect(() => {
@@ -141,31 +142,31 @@ function TrendChart({result}){
   );
 }
 
-function countryLabel(code){ 
+function countryLabel(code) {
   try {
-    return new Intl.DisplayNames(['en'], {type: 'region'}).of(code) || code;
+    return new Intl.DisplayNames(['en'], { type: 'region' }).of(code) || code;
   } catch {
     return code;
   }
 }
 
-function tooltipLines(text){
+function tooltipLines(text) {
   return text.match(/.{1,48}(?:\s|$)|\S{1,48}/g)?.map(line => line.trim()) || [text];
 }
 
-function InsightChart({id, title, rows, metric, description, coverage, cited = false}) {
+function InsightChart({ id, title, rows, metric, description, coverage, overviewId, chartType, cited = false }) {
   const canvas = useRef(null);
 
   useEffect(() => {
-    if(!rows.length) return;
+    if (!rows.length) return;
     const chart = new Chart(canvas.current, {
       type: 'bar',
-      data:{
+      data: {
         labels: rows.map(row => row.label),
         datasets: [{
           label: metric,
           data: rows.map(row => row.value),
-          backgroundColor: rows.map(row => row.is_other ? '#98aa9e' : '#365e50'),
+          backgroundColor: '#365e50',
           borderRadius: 4,
           maxBarThickness: 25,
         }],
@@ -205,31 +206,28 @@ function InsightChart({id, title, rows, metric, description, coverage, cited = f
       },
     });
     return () => chart.destroy();
-    }, [rows, metric, cited]);
+  }, [rows, metric, cited]);
 
-    return (
-      <section className={`trend-card insight-card ${cited ? 'cited-card' : ''}`} aria-labelledby={id}>
-        <div className="chart-heading"><h3 id={id}>{title}</h3></div>
-        {rows.length > 0 ? (
-          <div className="chart-wrap insight-chart-wrap">
-            <canvas ref={canvas} role="img" aria-label={`${title}, measured in ${metric.toLowerCase()}. Full labels and exact values are in the table below.`} />
-          </div>
-        ) : (
-          <p className="insight-empty" role="status">This metadata is unavailable for the supporting papers retrieved.</p>
-        )}
-        <p className="insight-description">{description}</p>
-        {coverage && <p className="insight-coverage">{coverage}</p>}
-        {rows.length > 0 && (
-          <details className="chart-table">
-            <summary>View full {cited ? 'titles' : 'names'} and numbers</summary>
-            <table>
-              <caption className="sr-only">{title}</caption>
-              <thead>
-                <tr><th scope="col">{cited ? 'Paper' : 'Name'}</th>
-                {cited && <th scope="col">Year</th>}
-                <th scope="col">{metric}</th></tr>
-              </thead>
-              <tbody>
+  return (
+    <section className={`trend-card insight-card ${cited ? 'cited-card' : ''}`} aria-labelledby={id}>
+      <div className="chart-heading"><h3 id={id}>{title}</h3></div>
+      {rows.length > 0 ? (
+        <div className="chart-wrap insight-chart-wrap">
+          <canvas ref={canvas} role="img" aria-label={`${title}, measured in ${metric.toLowerCase()}. Full labels and exact values are in the table below.`} />
+        </div>
+      ) : (
+        <p className="insight-empty" role="status">This metadata is unavailable for the supporting papers retrieved.</p>
+      )}
+      <p className="insight-description">{description}</p>
+      {coverage && <p className="insight-coverage">{coverage}</p>}
+      {rows.length > 0 && <OverviewExplanation key={overviewId} overviewId={overviewId} chartType={chartType} title={title} />}
+      {rows.length > 0 && (
+        <details className="chart-table">
+          <summary>View full {cited ? 'titles' : 'names'} and numbers</summary>
+          <table>
+            <caption className="sr-only">{title}</caption>
+            <thead><tr><th scope="col">{cited ? 'Paper' : 'Name'}</th>{cited && <th scope="col">Year</th>}<th scope="col">{metric}</th></tr></thead>
+            <tbody>
               {rows.map(row => (
                 <tr key={row.id}>
                   <th scope="row">
@@ -240,49 +238,52 @@ function InsightChart({id, title, rows, metric, description, coverage, cited = f
                   {cited && <td>{row.publication_year ?? 'Unavailable'}</td>}
                   <td>{row.value.toLocaleString()}</td>
                 </tr>
-                ))}
-              </tbody>
-            </table>
-          </details>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
     </section>
-    );
+  );
 }
 
-function SupportingInsights({result}){
+function SupportingInsights({ result }) {
   const coverage = result.coverage || {};
   const missing = (count, field) => count > 0
     ? `${count} supporting paper${count === 1 ? ' lacks' : 's lack'} available ${field} metadata and ${count === 1 ? 'is' : 'are'} excluded here.` : '';
   const countryCoverage = [
     missing(coverage.missing_country_papers, 'affiliation-country'),
     coverage.partial_country_papers > 0
-     ? `${coverage.partial_country_papers} papers have some authors without country information; counts may be incomplete.` : '',
+      ? `${coverage.partial_country_papers} papers have some authors without country information; counts may be incomplete.` : '',
     coverage.possibly_truncated_authorship_papers > 0
       ? `${coverage.possibly_truncated_authorship_papers} papers reach OpenAlex’s 100-author limit; additional countries may be missing.` : '',
   ].filter(Boolean).join(' ');
-  return(
+  return (
     <div className="insights-grid">
       <InsightChart
         id="venue-title" title="Top publication venues" metric="Distinct supporting papers"
-        rows={(result.venue_data || []).map(row => ({ ...row, id: row.id || 'other-venues', value: row.papers }))}
-        description="Counts distinct supporting papers by their primary journal or conference source. Other venues combines the remaining known venues."
+        overviewId={result.overview_id} chartType="venues"
+        rows={(result.venue_data || []).map(row => ({ ...row, value: row.papers }))}
+        description="Shows the top five primary journals or conference sources by distinct supporting papers."
         coverage={missing(coverage.missing_venue_papers, 'publication-venue')}
       />
       <InsightChart
         id="country-title" title="Top countries by author affiliation" metric="Distinct supporting papers"
-        rows={(result.country_data || []).map(row => ({ ...row, id: row.country_code || 'other-countries',
-          label: row.is_other ? row.label : countryLabel(row.country_code), value: row.papers }))}
-        description="Each paper counts once for each represented author-affiliation country. Multinational papers appear under multiple countries, so totals can exceed the number of papers. Other countries sums the remaining country counts."
+        overviewId={result.overview_id} chartType="countries"
+        rows={(result.country_data || []).map(row => ({ ...row, id: row.country_code,
+          label: countryLabel(row.country_code), value: row.papers }))}
+        description="Shows the top five author-affiliation countries. Each paper counts once for each represented country. Multinational papers appear under multiple countries, so totals can exceed the number of papers."
         coverage={countryCoverage}
       />
       <InsightChart
         id="cited-title" title="Top five most-cited supporting papers" metric="Citations" cited
+        overviewId={result.overview_id} chartType="citations"
         rows={(result.top_cited_papers || []).map(row => ({ ...row, label: row.title, value: row.cited_by_count }))}
         description="Ranked by OpenAlex citation counts, not views or downloads. Full titles, publication years, and paper links are available below."
         coverage={missing(coverage.missing_citation_papers, 'citation-count')}
       />
     </div>
-  )
+  );
 }
 
 export default function Overview() {
@@ -302,23 +303,22 @@ export default function Overview() {
     const controller = new AbortController();
     api('connections', controller.signal)
       .then(body => setConnections(body.connections))
-      .catch(err => { if(err.name !== 'AbortError') setConfigError(err.message); });
+      .catch(err => { if (err.name !== 'AbortError') setConfigError(err.message); });
 
-      const active = searches.current;
-      return () => {
-        controller.abort();
-        trendSearch.current?.abort();
-        active.forEach(item => item?.abort());
-      };
+    const active = searches.current;
+    return () => {
+      controller.abort();
+      trendSearch.current?.abort();
+      active.forEach(item => item?.abort());
+    };
   }, []);
 
   function patch(index, changes) {
-    setConcepts(current => current.map((item, i) => (i === index ? { ...item, ...changes} : item)));
+    setConcepts(current => current.map((item, i) => (i === index ? { ...item, ...changes } : item)));
   }
 
-
-  // Any edit invalidates the chart it belong to the previos concepts.
-  function clearResult(){
+  /* Any edit invalidates the chart: it belonged to the previous concepts. */
+  function clearResult() {
     runId.current += 1;
     trendSearch.current?.abort();
     setResult(null);
@@ -326,46 +326,46 @@ export default function Overview() {
     setStatus('idle');
   }
 
-  function editConcept(index, text){
+  function editConcept(index, text) {
     clearResult();
     searches.current[index]?.abort();
-    patch(index, {  ...emptyConcept(), text});
+    patch(index, { ...emptyConcept(), text });
   }
 
-  async function searchConcept(index){
+  async function searchConcept(index) {
     const text = concepts[index].text.trim();
     if (text.length < 2) return;
 
     clearResult();
     searches.current[index]?.abort();
     const controller = new AbortController();
-    searches.current[index] = controller;  
+    searches.current[index] = controller;
     patch(index, { status: 'loading', candidates: [], selected: null, message: '' });
 
-    try{
+    try {
       const body = await api(`entities?q=${encodeURIComponent(text)}`, controller.signal);
       if (searches.current[index] !== controller) return;
       patch(index, {
         status: 'ready',
         candidates: body.candidates,
-        selected: body.selected, 
+        selected: body.selected,
         message: body.candidates.length
           ? 'Choose the concept you mean.'
           : 'No concept in CS-KG matches those words. Try a different spelling or a fuller name.',
       });
-    } catch (err){
+    } catch (err) {
       if (err.name === 'AbortError' || searches.current[index] !== controller) return;
-      patch(index, { status: 'error', message: err.message});
+      patch(index, { status: 'error', message: err.message });
     }
   }
 
-  function selectConcept(index, selected){
+  function selectConcept(index, selected) {
     clearResult();
     searches.current[index]?.abort();
     patch(index, { selected, candidates: [], status: 'ready', message: '' });
   }
-  
-  async function showTrend(event){
+
+  async function showTrend(event) {
     event?.preventDefault();
     if (!concepts.every(item => item.selected) || !connection) return;
 
@@ -398,155 +398,159 @@ export default function Overview() {
     ? `${concepts[0].selected.label} → ${friendly} → ${concepts[1].selected.label}`
     : 'Explore a connection';
 
-    return(
-      <div className="overview-layout">
-        <aside className="search-panel" aria-label="Relationship search">
-          <div className="panel-intro">
-            <span className="eyebrow">Your Research</span>
-            <h1>Connect two concepts</h1>
-            <p>Explore how a research relationship develops over time.</p>
+  return (
+    <div className="overview-layout">
+      <aside className="search-panel" aria-label="Relationship search">
+        <div className="panel-intro">
+          <span className="eyebrow">YOUR RESEARCH</span>
+          <h1>Connect two concepts.</h1>
+          <p>Explore how a research relationship develops over time.</p>
+        </div>
+
+        <form onSubmit={showTrend}>
+          <ConceptInput
+            id="first-concept" label="First concept" placeholder="e.g. machine learning"
+            value={concepts[0]}
+            onEdit={text => editConcept(0, text)}
+            onSearch={() => searchConcept(0)}
+            onSelect={item => selectConcept(0, item)}
+          />
+
+          <div className="connection-field">
+            <label htmlFor="connection">Connection</label>
+            <select
+              id="connection"
+              value={connection}
+              onChange={event => { clearResult(); setConnection(event.target.value); }}
+              disabled={!connections.length}
+            >
+              <option value="">Select a connection</option>
+              {connections.map(item => (
+                <option key={item.id} value={item.id}>{item.label}</option>
+              ))}
+            </select>
+            {configError && (
+              <p className="error-text" role="alert">
+                {configError}{' '}
+                <button className="text-button" type="button" onClick={() => window.location.reload()}>Retry</button>
+              </p>
+            )}
           </div>
 
-          <form onSubmit={showTrend}>
-            <ConceptInput
-              id="first-concept" label="First concept" placeholder="e.g. machine learning"
-              value={concepts[0]}
-              onEdit={text => editConcept(0, text)}
-              onSearch={() => searchConcept(0)}
-              onSelect={item => selectConcept(0, item)}
-            />
+          <ConceptInput
+            id="second-concept" label="Second concept" placeholder="e.g. random forest"
+            value={concepts[1]}
+            onEdit={text => editConcept(1, text)}
+            onSearch={() => searchConcept(1)}
+            onSelect={item => selectConcept(1, item)}
+          />
 
-            <div className="connection-field">
-              <label htmlFor="connection">Connection</label>
-              <select
-                id="connection"
-                value={connection}
-                onChange={event => { clearResult(); setConnection(event.target.value); }}
-                disabled={!connections.length}
-              >
-                <option value="">Select a connection</option>
-                {connections.map(item => (
-                  <option key={item.id} value={item.id}>{item.label}</option>
-                ))}
-              </select>
-              {configError && (
-                <p className="error-text" role="alert">
-                  {configError}{' '}
-                  <button className="text-button" type="button" onClick={() => window.location.reload()}>Retry</button>
-                </p>
-              )}
-            </div>
+          <button className="primary-button" type="submit" disabled={!ready || status === 'loading'}>
+            {status === 'loading' ? 'Finding evidence…' : 'Show trend'}
+            <span aria-hidden="true">→</span>
+          </button>
+        </form>
 
-            <ConceptInput
-              id="second-concept" label="Second concept" placeholder="e.g. random forest"
-              value={concepts[1]}
-              onEdit={text => editConcept(1, text)}
-              onSearch={() => searchConcept(1)}
-              onSelect={item => selectConcept(1, item)}
-            />
+        <div className="sidebar-note">
+          <span className="small-dot" aria-hidden="true" />
+          <p>Start with two concepts.<br />Follow the evidence between them.</p>
+        </div>
+      </aside>
 
-            <button className="primary-button" type="submit" disabled={!ready || status === 'loading'}>
-              {status === 'loading' ? 'finding evidence...' : 'Show trend'}
-              <span aria-hidden="true">→</span>
-            </button>
-          </form>
-          
-          <div className="sidebar-note">
-            <span className="small-dot" aria-hidden="true" />
-            <p>Start with two concepts.<br />Follow the evidence between them.</p>
+      <section className="results-panel" aria-label="Relationship trend">
+        <div className="results-heading">
+          <div>
+            <span className="eyebrow">OVERVIEW</span>
+            <h2>Research connections</h2>
+            <p>Discover the papers behind a direct relationship.</p>
           </div>
-        </aside>
+          <span className="source-tag">CS-KG · OpenAlex</span>
+        </div>
 
-        <section className='results-panel' aria-label='Relationship trend'>
-          <div className="results-heading">
+        <section className="trend-card" aria-labelledby="trend-title" aria-busy={status === 'loading'}>
+          <div className="chart-heading">
             <div>
-              <span className="eyebrow">OVERVIEW</span>
-              <h2>Research connections</h2>
-              <p>Discover the papers behind a direct relationship.</p>
-            </div> 
-            <span className="source-tag">CS-KG · OpenAlex</span>
+              <span className="eyebrow">PUBLICATIONS OVER TIME</span>
+              <h3 id="trend-title">{title}</h3>
+            </div>
+            {result?.total_papers > 0 && (
+              <span className="paper-count">
+                {result.total_papers.toLocaleString()}<small>supporting papers</small>
+              </span>
+            )}
           </div>
 
-          <section className="trend-card" aria-labelledby="trend-title" aria-busy={status === 'loading'}>
-            <div className="chart-heading">
-              <div>
-                <span className="eyebrow">PUBLICATIONS OVER TIME</span>
-                <h3 id="trend-title">{title}</h3>
+          {status === 'idle' && (
+            <div className="empty-state">
+              <div className="empty-icon" aria-hidden="true">
+                <svg viewBox="0 0 100 64">
+                  <path d="M8 8v48h84M20 42l18-14 17 6 24-23" />
+                  <circle cx="20" cy="42" r="3" /><circle cx="38" cy="28" r="3" />
+                  <circle cx="55" cy="34" r="3" /><circle cx="79" cy="11" r="3" />
+                </svg>
               </div>
-              {result?.total_papers > 0 && (
-                <span className="paper-count">
-                  {result.total_papers.toLocaleString()}<small>supporting papers</small>
-                </span>
-              )}
+              <h4>Your next insight starts here</h4>
+              <p>Choose two concepts and a connection,<br />then show their research trend.</p>
+              <span className="empty-caption">Each point represents the papers published in that period.</span>
             </div>
+          )}
 
-            {status === 'idle' && (
-              <div className="empty-state">
-                <div className="empty-icon" aria-hidden="true">
-                  <svg viewBox="0 0 100 64">
-                    <path d="M8 8v48h84M20 42l18-14 17 6 24-23" />
-                    <circle cx="20" cy="42" r="3" /><circle cx="38" cy="28" r="3" />
-                    <circle cx="55" cy="34" r="3" /><circle cx="79" cy="11" r="3" />
-                  </svg>
-                </div>
-                <h4>Your next insight starts here</h4>
-                <p>Choose two concepts and a connection,<br />then show their research trend.</p>
-                <span className="empty-caption">Each point represents the papers published in that period.</span>
-              </div>
-            )}
+          {status === 'loading' && (
+            <div className="empty-state" role="status">
+              <span className="spinner" />
+              <h4>Following the evidence</h4>
+              <p>Finding the relationship in CS-KG, then its papers in OpenAlex.<br />This usually takes a few seconds.</p>
+            </div>
+          )}
 
-            {status === 'loading' && (
-              <div className="empty-state" role="status">
-                <span className='spinner' />
-                <h4>Following the evidence</h4>
-                <p>Finding the relationship in CS-KG, then its papers in OpenAlex.<br />This usually takes a few seconds.</p>
-              </div>
-            )}
+          {status === 'error' && (
+            <div className="empty-state" role="alert">
+              <h4>We couldn’t load this trend</h4>
+              <p>{error}</p>
+              <button className="secondary-button" type="button" onClick={showTrend}>Try again</button>
+            </div>
+          )}
 
-            {status === 'error' &&(
-              <div className="empty-state" role="alert">
-                <h4>We couldn't load this trend</h4>
-                <p>{error}</p>
-                <button className="secondary-button" type="button" onClick={showTrend}>Try again</button>
-              </div>
-            )}
-
-            {status === 'ready' && result?.status === 'no_relationship' && (
-              <div className="empty-state" role="status">
-                <h4>No papers record this connection</h4>
+          {status === 'ready' && result?.status === 'no_relationship' && (
+            <div className="empty-state" role="status">
+              <h4>No papers record this connection</h4>
               <p>
                 CS-KG holds no statement linking these two concepts in this way.<br />
                 Try one of the other connections.
               </p>
-              </div>
-            )}
-
-            {status === 'ready' && result?.status === 'no_years' && (
-              <div className="empty-state" role="status">
-                <h4>Publication years are unavailable</h4>
-                <p>The connection has supporting papers, but none of their publication years could be retrieved.</p>
-              </div>
-            )}
-
-            {status === 'ready' && result?.status === 'ok' && <TrendChart result={result} />}
-
-            {status === 'ready' && result?.notes?.length > 0 && (
-              <div className="result-notice" role="status">
-                {result.notes.map(note => <p key={note}>{note}</p>)}
-              </div>
-            )}
-
-            <div className="chart-footer">
-              <span><span className="legend-dot" />Distinct supporting papers</span>
-              <span>Direct connection · First → Second</span>
             </div>
-          </section>
-
-          {status ===  'ready' && ['ok', 'no_years'].includes(result?.status) && (
-            <SupportingInsights result={result} />
           )}
 
-          <p className="results-note">
+          {status === 'ready' && result?.status === 'no_years' && (
+            <div className="empty-state" role="status">
+              <h4>Publication years are unavailable</h4>
+              <p>The connection has supporting papers, but none of their publication years could be retrieved.</p>
+            </div>
+          )}
+
+          {status === 'ready' && result?.status === 'ok' && <>
+            <TrendChart result={result} />
+            <OverviewExplanation key={result.overview_id} overviewId={result.overview_id}
+              chartType="publications" title="publications over time" />
+          </>}
+
+          {status === 'ready' && result?.notes?.length > 0 && (
+            <div className="result-notice" role="status">
+              {result.notes.map(note => <p key={note}>{note}</p>)}
+            </div>
+          )}
+
+          <div className="chart-footer">
+            <span><span className="legend-dot" />Distinct supporting papers</span>
+            <span>Direct connection · First → Second</span>
+          </div>
+        </section>
+
+        {status === 'ready' && ['ok', 'no_years'].includes(result?.status) && (
+          <SupportingInsights result={result} />
+        )}
+
+        <p className="results-note">
           A connection is supported by papers that record that exact relationship between both concepts.
           CS-KG covers computer-science literature published roughly between 2010 and 2022, so later years will not appear.
         </p>
@@ -554,19 +558,3 @@ export default function Overview() {
     </div>
   );
 }
-        
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

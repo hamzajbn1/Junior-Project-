@@ -1,7 +1,6 @@
 import { Link, NavLink } from 'react-router-dom';
 
 export default function Layout({ children }) {
-
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -12,8 +11,7 @@ export default function Layout({ children }) {
         <div className="page-heading">
           <nav aria-label="Main navigation">
             <NavLink to="/" end>Overview</NavLink>
-            <NavLink to="/assistant">Assistant</NavLink>
-            <NavLink to="/agent2-test" style={{fontSize: 13}}>Agent 2 Test</NavLink>
+            <NavLink to="/assistant">AI Assistant</NavLink>
           </nav>
           <span className="domain"><span aria-hidden="true" />Computer Science</span>
         </div>

@@ -1,5 +1,11 @@
+# Frontend dependencies and generated builds
+node_modules/
+dist/
+dist-ssr/
+.vite/
+
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,69 +13,57 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Python virtual environments
+venv/
+.venv/
+env/
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
+# Test coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage/
+coverage.xml
+
+# API keys and local configuration
+.env
+.env.*
+!.env.example
 *.local
 
-# Editor directories and files
+# Local assistant database and SQLite transaction files
+/data/*.sqlite3*
+
+# Generated exports and cached concept data
+openalex_results.json
+openalex_results.csv
+src/data/entity-index.json
+
+# Local TLS certificates
+*.pem
+
+# Temporary files
+*.tmp
+*.bak
+
+# Editor and operating-system files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
+Desktop.ini
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-
-# ---------------------------------------------------------------------------
-# Python backend
-# ---------------------------------------------------------------------------
-
-# Virtual environment. Hundreds of MB of machine-specific binaries: rebuild it
-# with `python -m venv src/venv`, never commit it.
-venv/
-src/venv/
-.venv/
-env/
-
-# Compiled bytecode
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Test and coverage output
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-
-# ---------------------------------------------------------------------------
-# Secrets and machine-specific configuration
-# ---------------------------------------------------------------------------
-
-# Never commit an OpenAlex key or an endpoint override.
-.env
-.env.*
-!.env.example
-
-# TLS certificate fetched from the CS-KG server by src/fetch_cskg_cert.py.
-# Not secret, but it belongs to one deployment: regenerate it, don't share it.
-*.pem
-src/data/cskg-ca.pem
-
-# ---------------------------------------------------------------------------
-# Generated data
-# ---------------------------------------------------------------------------
-
-# Output of the older CS-KG -> OpenAlex export scripts.
-openalex_results.json
-openalex_results.csv
-
-# Any cached CS-KG concept catalog, if one is ever reintroduced.
-src/data/entity-index.json
-*.tmp
-
-# Local assistant result database and SQLite transaction files.
-/data/*.sqlite3*

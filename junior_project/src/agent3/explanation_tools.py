@@ -1,21 +1,18 @@
-"""T5-T7 for saved annual counts. No research requests and no year modification."""
-import copy
-import json
-import re
-from collections import Counter
+import copy  
 from datetime import datetime
 
 from shared import ServiceError
-from shared.cskg_service import CONNECTIONS
+from shared.cskg_service import CONNECTIONS 
 
 
 def reject(message):
     raise ServiceError(message, 409, code="invalid_research_result", retryable=False)
 
 
-def validate_input(result):
-    """T6 input gate: check the public result, without claiming to re-audit papers."""
-    if not isinstance(result, dict):
+# 	Checks that Agent 2's data is valid and consistent.
+# what is inside the "result" is the data that is inside the "result" from this file agent2/research_agent.py.
+def T6_validate_input(result):
+    if not isinstance(result, dict):  
         reject("This research run has no result to explain.")
     if result.get("status") not in {"complete", "partial", "empty"}:
         reject("Finish Agent 2 research and any concept choices before using Agent 3.")
@@ -25,13 +22,16 @@ def validate_input(result):
         reject("Agent 2 validation must pass before Agent 3 can explain the values.")
     if not isinstance(result.get("result_id"), str) or not result["result_id"]:
         reject("The research result is missing its internal reference.")
+    
     relation = result.get("relationship")
     request = result.get("request")
-    filters = result.get("filters")
+    filters = result.get("filters") 
+
     if not all(isinstance(value, dict) for value in (relation, request, filters)):
         reject("The result is missing its relationship or year scope.")
-    if (relation.get("found") is not True or relation.get("predicate") not in {item["id"] for item in CONNECTIONS}
-            or relation.get("predicate") != request.get("connection")):
+    if (relation.get("found") is not True 
+        or relation.get("predicate") not in {item["id"] for item in CONNECTIONS}
+        or relation.get("predicate") != request.get("connection")):
         reject("The result does not identify an approved directed relationship.")
     resolution = result.get("resolution", {})
     for side, field in (("first", "subject"), ("second", "object")):
@@ -54,6 +54,7 @@ def validate_input(result):
     complete = coverage.get("year_counts_complete")
     if type(complete) is not bool or complete != (result["status"] == "complete"):
         reject("The result status and its coverage disagree.")
+
     years = []
     total = 0
     for row in rows:
@@ -96,90 +97,51 @@ def validate_input(result):
         reject("The saved warnings are unreadable.")
 
 
-def prepare_graph_facts(result):
-    """T5: calculate extrema and simple observed movement; keep the original rows."""
+#This function analyzes the yearly paper counts from Agent 2 to identify the highest count, lowest count, and numerical yearly changes.
+def T5_prepare_graph_facts(result):
+    """T5: calculate extrema and numerical yearly changes; keep the original rows."""
     known = [row for row in result["yearly_counts"] if row["papers"] is not None]
     if not known:
         return None
-    highest = max(row["papers"] for row in known)
+    highest = max(row["papers"] for row in known) 
     lowest = min(row["papers"] for row in known)
-    # Only compare adjacent known calendar years. Never bridge an unknown gap.
-    changes = [right["papers"] - left["papers"] for left, right in
-               zip(result["yearly_counts"], result["yearly_counts"][1:])
-               if left["papers"] is not None and right["papers"] is not None]
-    if len(known) == 1:
-        kind = "single_year"
-        trend = "Only one year has an observed count, so a year-to-year trend cannot be established."
-    elif not changes:
-        kind = "unknown_gaps"
-        trend = "Unknown years separate the observed counts, so consecutive yearly changes cannot be established."
-    elif any(value > 0 for value in changes) and any(value < 0 for value in changes):
-        kind = "mixed"
-        trend = "The observed counts include both increases and decreases."
-    elif any(value > 0 for value in changes):
-        kind = "increasing"
-        trend = "The observed consecutive yearly counts increased or stayed the same."
-    elif any(value < 0 for value in changes):
-        kind = "decreasing"
-        trend = "The observed consecutive yearly counts decreased or stayed the same."
-    else:
-        kind = "unchanged"
-        trend = "The observed consecutive yearly counts stayed the same."
     return {
         "highest": {"papers": highest, "years": [row["year"] for row in known if row["papers"] == highest]},
         "lowest": {"papers": lowest, "years": [row["year"] for row in known if row["papers"] == lowest]},
-        "trend": {"kind": kind, "text": trend},
         "counted_papers": result["counted_papers"],
         "coverage_complete": result["coverage"]["year_counts_complete"],
+        "yearly_changes": [
+            {"from_year": left["year"], "to_year": right["year"],
+             "difference": right["papers"] - left["papers"],
+             "percent_change": round((right["papers"] - left["papers"]) * 100 / left["papers"], 2)
+             if left["papers"] else None}
+            for left, right in zip(result["yearly_counts"], result["yearly_counts"][1:])
+            if left["papers"] is not None and right["papers"] is not None
+        ],
     }
 
 
-def build_chart_spec(result):
+# This function prepares Agent 2's research data for displaying a graph.
+def T7_build_chart_spec(result):
     """T7: exact received values, automatic chart type, no new year filtering."""
     rows = result["yearly_counts"]
     if not rows or not any(row["papers"] is not None for row in rows):
         return None
-    filters = result["filters"]
+    filters = result["filters"]  
     first = filters.get("start_year") or rows[0]["year"]
     last = filters.get("end_year") or rows[-1]["year"]
     return {
-        "result_id": result["result_id"], "version": result.get("version"),
+        "result_id": result["result_id"], 
+        "version": result.get("version"),
         "type": "bar" if last - first + 1 <= 5 else "line",
-        "x_label": "Publication year", "y_label": "Distinct supporting papers",
-        "labels": [str(row["year"]) for row in rows],
-        "values": [row["papers"] for row in rows],
-        "filters": copy.deepcopy(filters), "span_years": last - first + 1,
-        "warnings": list(result["warnings"]),
+        "x_label": "Publication year", 
+        "y_label": "Distinct supporting papers",
+        "labels": [str(row["year"]) for row in rows], 
+        "values": [row["papers"] for row in rows], 
+        "filters": copy.deepcopy(filters),
+        "span_years": last - first + 1,
+        "warnings": list(result["warnings"]), 
     }
 
 
-def validate_explanation(text, facts):
-    """T6 output check: required facts, exact numbers, no unsupported analysis."""
-    try:
-        answer = json.loads(text)
-    except (ValueError, TypeError):
-        raise ServiceError("Gemini returned an unreadable explanation. Retry the explanation.", 502,
-                           code="invalid_explanation") from None
-    valid = isinstance(answer, dict) and set(answer) == {"highest", "lowest", "trend"}
-    if valid:
-        valid = all(isinstance(value, str) and 1 <= len(value) <= 10000 for value in answer.values())
-    if valid:
-        for name in ("highest", "lowest"):
-            sentence = answer[name]
-            numbers = Counter(int(value) for value in re.findall(r"\d+", sentence))
-            expected = Counter(facts[name]["years"] + [facts[name]["papers"]])
-            valid = valid and numbers == expected and name + " observed" in sentence.casefold()
-            valid = valid and ("lowest" if name == "highest" else "highest") not in sentence.casefold()
-            valid = valid and not re.search(r"[-+%]|\d\.\d|\d,\d", sentence)
-        # This sentence is computed, not an invitation to invent causes or forecasts.
-        valid = valid and answer["trend"] == facts["trend"]["text"]
-        forbidden = r"because|due to|driven by|caused|proves?|implies|suggests|popular|quality|funding|breakthrough|adoption|covid|pandemic|authors?|abstract|venues?|countr|citations?|forecast|predict|percent|<|>|https?://"
-        valid = valid and not any(re.search(forbidden, value, re.I) for value in answer.values())
-        # A number immediately before 'papers' must be the corresponding extremum.
-        for name in ("highest", "lowest"):
-            counts = re.findall(r"\b(\d+)\s+(?:supporting\s+)?papers?\b", answer[name], re.I)
-            valid = valid and counts == [str(facts[name]["papers"])]
-    if not valid:
-        raise ServiceError("The explanation did not match the verified graph facts. Retry the explanation.",
-                           502, code="invalid_explanation")
-    return answer
+

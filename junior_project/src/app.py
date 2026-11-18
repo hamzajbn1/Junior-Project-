@@ -15,6 +15,7 @@ from shared.cskg_service import (
     search_query, rank, validate_concept,
 )
 from shared.research_processing import publication_year, supporting_insights, bucket
+from shared.overview_explanations import remember_overview, explain_overview_chart
 
 OPENALEX_BASE = openalex.OPENALEX_BASE
 OPENALEX_HEADERS = openalex.OPENALEX_HEADERS
@@ -65,8 +66,6 @@ def api_entities():
     try:
         return jsonify(resolve_entities(text))
     except ServiceError as error:
-        # A search that ran out of time is not the same as a search that
-        # finished and found nothing. Say so.
         if str(error) == "__TIMEOUT__":
             raise ServiceError(
                 f"The search took longer than {SEARCH_TIMEOUT} seconds and was stopped. Try a longer or more specific word.",
@@ -78,11 +77,10 @@ def api_entities():
 @app.get("/api/relationship")
 def api_relationship():
     try:
-        return jsonify(relationship_trend(
-            request.args.get("s"),
-            request.args.get("p"),
-            request.args.get("o"),
-        ))
+        subject, predicate, obj = request.args.get("s"), request.args.get("p"), request.args.get("o")
+        result = relationship_trend(subject, predicate, obj)
+        return jsonify(remember_overview(result, {"first_concept": local_name(subject),
+                       "connection": predicate, "second_concept": local_name(obj)}))
     except ServiceError as error:
         if str(error) == "__TIMEOUT__":
             raise ServiceError(
@@ -90,6 +88,15 @@ def api_relationship():
                 504,
             ) from error
         raise
+
+
+@app.post("/api/overview/explain")
+def api_overview_explain():
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict) or set(body) != {"overview_id", "chart_type"}:
+        raise ServiceError("Select an Overview result and chart to explain.", 400)
+    output = explain_overview_chart(body["overview_id"], body["chart_type"])
+    return jsonify(output), 502 if output["status"] == "explanation_failed" else 200
 
 
 # Kept from the original project. No page uses it yet.
@@ -130,6 +137,8 @@ app.register_blueprint(create_research_blueprint())
 from agent3.explanation_routes import create_explanation_blueprint
 app.register_blueprint(create_explanation_blueprint())
 
+from agent1.assistant_routes import create_assistant_blueprint
+app.register_blueprint(create_assistant_blueprint())
+
 if __name__ == "__main__":
-    # threaded=True so one slow graph query does not block the next request.
     app.run(host="127.0.0.1", port=5000, threaded=True)

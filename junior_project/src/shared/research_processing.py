@@ -34,8 +34,6 @@ def supporting_insights(references, works, failed, unusable=0):
         source = location.get("source") if isinstance(location, dict) else None
         source = source if isinstance(source, dict) else {}
         source_id, label = source.get("id"), source.get("display_name")
-        # A repository/hosting platform is not a publication venue. Do not
-        # substitute the publisher, another location, or the author's institution.
         if (isinstance(source_id, str)
                 and re.fullmatch(r"https://openalex\.org/S\d+", source_id)
                 and isinstance(label, str) and label.strip()
@@ -71,8 +69,6 @@ def supporting_insights(references, works, failed, unusable=0):
             coverage["missing_country_papers"] += 1
         elif incomplete:
             coverage["partial_country_papers"] += 1
-        # OpenAlex caps inline authorships at 100. Conservatively flag records
-        # at the cap without fetching them again or claiming full coverage.
         if len(authorships) >= 100:
             coverage["possibly_truncated_authorship_papers"] += 1
 
@@ -89,15 +85,9 @@ def supporting_insights(references, works, failed, unusable=0):
 
     venue_rows = sorted(venues.values(), key=lambda row: (-row["papers"], normalize(row["label"]), row["id"]))
     venue_data = venue_rows[:5]
-    if len(venue_rows) > 5:
-        venue_data.append({"id": None, "label": "Other venues", "is_other": True,
-                           "papers": sum(row["papers"] for row in venue_rows[5:])})
     country_rows = sorted(countries.items(), key=lambda row: (-row[1], row[0]))
     country_data = [{"country_code": code, "papers": count, "is_other": False}
                     for code, count in country_rows[:5]]
-    if len(country_rows) > 5:
-        country_data.append({"country_code": None, "label": "Other countries", "is_other": True,
-                             "papers": sum(count for _, count in country_rows[5:])})
     cited.sort(key=lambda row: (-row["cited_by_count"], normalize(row["title"]), row["id"]))
     partial = any(value for key, value in coverage.items()
                   if key not in {"requested_papers", "retrieved_papers"})
@@ -198,8 +188,7 @@ def aggregate_research(records, evidence, metadata, *, start_year=None, end_year
     outside = len(records) - len(undated) - len(eligible)
     incomplete = bool(missing or undated or evidence["unmapped_references"] or metadata["failed_ids"])
     counts = year_counts(records, start_year, end_year)
-    # Match Overview's observed span when years are blank. Never pad to today's
-    # year or imply coverage outside retrieved records; partial gaps are unknown.
+
     rows = [{"year": year, "papers": counts.get(year, None if incomplete else 0)}
             for year in range(min(counts), max(counts) + 1)] if counts else []
     warnings = []

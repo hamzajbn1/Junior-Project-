@@ -3,7 +3,7 @@ import { Chart, registerables } from 'chart.js';
 
 Chart.register(...registerables);
 
-function ResultChart({ spec }) {
+export function ResultChart({ spec }) {
   const canvas = useRef(null);
   useEffect(() => {
     const chart = new Chart(canvas.current, {
@@ -34,7 +34,7 @@ function ResultChart({ spec }) {
     </div>
     <details><summary>View exact chart values</summary>
       <table style={{ width: '100%', maxWidth: 480, textAlign: 'left' }}>
-        <caption>Original annual counts received from Agent 2</caption>
+        <caption>Annual counts for this result</caption>
         <thead><tr><th scope="col">Publication year</th><th scope="col">Supporting papers</th></tr></thead>
         <tbody>{spec.labels.map((year, index) => <tr key={year}>
           <td>{year}</td><td>{spec.values[index] ?? 'Unknown — incomplete coverage'}</td>
