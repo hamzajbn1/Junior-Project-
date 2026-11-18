@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ResultChart } from '../components/Agent3Result';
 import '../design/assistant.css';
@@ -56,6 +56,7 @@ export default function Assistant() {
   const [reload, setReload] = useState(0);
   const activeRequest = useRef(null);
   const scroll = useRef(null);
+  const input = useRef(null);
   const loading = !ready || chatId !== loadedChatId;
   const pending = !loading && turns.find(t => ACTIVE.has(t.status));
   const pendingId = pending?.turn_id;
@@ -110,6 +111,26 @@ export default function Assistant() {
   }, [chatId, pendingId, pendingStatus]);
 
   useEffect(() => { if (scroll.current) scroll.current.scrollTop = scroll.current.scrollHeight; }, [turns]);
+
+  useLayoutEffect(() => {
+    const textarea = input.current;
+    let width = textarea.clientWidth;
+    function resize() {
+      textarea.style.height = 'auto';
+      const maxHeight = parseFloat(getComputedStyle(textarea).maxHeight);
+      textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+      textarea.style.overflowY = textarea.scrollHeight > textarea.clientHeight ? 'auto' : 'hidden';
+    }
+    resize();
+    const observer = new ResizeObserver(() => {
+      if (textarea.clientWidth !== width) {
+        width = textarea.clientWidth;
+        resize();
+      }
+    });
+    observer.observe(textarea);
+    return () => observer.disconnect();
+  }, [draft]);
 
   async function send(event) {
     event.preventDefault();
@@ -216,7 +237,7 @@ export default function Assistant() {
         {error && <p className="assistant-error" role="alert">{error} <button onClick={reconnect}>Reconnect</button></p>}
         <form className="assistant-composer" onSubmit={send}>
           <label className="sr-only" htmlFor="research-question">Message</label>
-          <textarea id="research-question" value={draft} onChange={e => setDraft(e.target.value)} maxLength={2000} rows={2} placeholder="Ask about a relationship or your current results." />
+          <textarea ref={input} id="research-question" value={draft} onChange={e => setDraft(e.target.value)} maxLength={2000} rows={1} placeholder="Ask about a relationship or your current results." />
           <div className="assistant-composer-actions">
             <label className="assistant-provider" htmlFor="assistant-provider">
               <span className="sr-only">Model</span>
