@@ -5,9 +5,10 @@ import '../design/assistant.css';
 
 const ACTIVE = new Set(['running', 'needs_clarification']);
 
-async function request(path, body, signal) {
+async function request(path, body, signal, method = body === undefined ? 'GET' : 'POST') {
   const response = await fetch(`/api/assistant/${path}`, {
-    ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), signal,
+    method,
+    ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), signal,
   });
   let data;
   try { data = await response.json(); } catch { throw new Error('The assistant returned an unreadable response.'); }
@@ -52,6 +53,7 @@ export default function Assistant() {
   const [error, setError] = useState('');
   const [connection, setConnection] = useState(null);
   const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [ready, setReady] = useState(false);
   const [reload, setReload] = useState(0);
   const activeRequest = useRef(null);
@@ -61,7 +63,8 @@ export default function Assistant() {
   const pending = !loading && turns.find(t => ACTIVE.has(t.status));
   const pendingId = pending?.turn_id;
   const pendingStatus = pending?.status;
-  const busy = sending || loading || Boolean(pending);
+  const chatControlsBusy = sending || deleting;
+  const busy = chatControlsBusy || loading || Boolean(pending);
   const selectedConfigured = provider === 'auto' ? connection?.configured : connection?.providers?.[provider]?.configured;
 
   useEffect(() => {
@@ -170,7 +173,7 @@ export default function Assistant() {
   }
 
   async function resume(turn, selections) {
-    if (sending) return;
+    if (chatControlsBusy) return;
     setSending(true); setError('');
     try {
       await request(`chats/${chatId}/turns/${turn.turn_id}/resume`, { selections });
@@ -180,7 +183,7 @@ export default function Assistant() {
   }
 
   async function newConversation() {
-    if (sending) return;
+    if (chatControlsBusy) return;
     setSending(true); setError('');
     try {
       const chat = await request('chats', {});
@@ -188,6 +191,17 @@ export default function Assistant() {
       setSearchParams({ chat: String(chat.chat_id) });
     } catch (failure) { setError(failure.message); }
     finally { setSending(false); }
+  }
+
+  async function deleteConversation(targetChatId) {
+    if (targetChatId === chatId || chatControlsBusy) return;
+    setDeleting(true);
+    setError('');
+    try {
+      await request('chats/' + targetChatId, undefined, undefined, 'DELETE');
+      setChats(current => current.filter(chat => chat.chat_id !== targetChatId));
+    } catch (failure) { setError(failure.message); }
+    finally { setDeleting(false); }
   }
 
   async function reconnect() {
@@ -204,13 +218,23 @@ export default function Assistant() {
     <aside className="assistant-sidebar">
       <span className="eyebrow">RESEARCH ASSISTANT</span><h1>Explore your research.</h1>
       <p>Research a relationship, ask about its graph, or focus on specific years.</p>
-      <button className="assistant-new" disabled={sending} onClick={newConversation}>＋ New conversation</button>
+      <button className="assistant-new" disabled={chatControlsBusy} onClick={newConversation}>＋ New conversation</button>
       <nav className="assistant-chat-list" aria-label="Saved conversations">
-        {chats.map(chat => <button key={chat.chat_id} type="button" disabled={sending}
-          aria-current={chat.chat_id === chatId ? 'page' : undefined}
-          onClick={() => setSearchParams({ chat: String(chat.chat_id) })}>
-          <small>Chat {chat.chat_id}</small><span>{chat.title}</span>
-        </button>)}
+        {chats.map(chat => {
+          const isCurrent = chat.chat_id === chatId;
+          return <div key={chat.chat_id} className="assistant-chat-row">
+            <button className="assistant-open-chat" type="button" disabled={chatControlsBusy}
+              aria-current={isCurrent ? 'page' : undefined}
+              onClick={() => setSearchParams({ chat: String(chat.chat_id) })}>
+              <small>Chat {chat.chat_id}</small><span>{chat.title}</span>
+            </button>
+            <button className="assistant-delete-chat" type="button"
+              aria-label={'Delete chat ' + chat.chat_id}
+              title={isCurrent ? 'Switch chats before deleting this conversation' : 'Delete conversation'}
+              disabled={isCurrent || chatControlsBusy}
+              onClick={() => deleteConversation(chat.chat_id)}>&times;</button>
+          </div>;
+        })}
       </nav>
       <div className="assistant-model"><span className="assistant-model-dot" /><div><strong>AI Assistant</strong>
         <p>{{ auto: 'Auto', gemini: 'Gemini', groq: 'Groq / Qwen' }[provider]} · {selectedConfigured ? 'Configured' : 'Check backend configuration'}</p></div></div>
@@ -227,7 +251,7 @@ export default function Assistant() {
             {turn.text && <p className="assistant-reply">{turn.text}</p>}
             {turn.text && turn.model_calls?.at(-1)?.model && <small>{turn.model_calls.at(-1).model}</small>}
             {turn.outputs.map((output, i) => <Output key={`${turn.id}-${i}`} output={output} />)}
-            {turn.status === 'needs_clarification' && <Choices turn={turn} onResume={resume} disabled={sending} />}
+            {turn.status === 'needs_clarification' && <Choices turn={turn} onResume={resume} disabled={chatControlsBusy} />}
             {turn.status === 'running' && <p className="assistant-wait" role="status">{turn.events?.at(-1)?.message || 'Understanding your request…'}</p>}
             {turn.events?.length > 0 && <details className="plan-details"><summary>View progress</summary><ol>{turn.events.map((e, i) => <li key={i}>{e.step}: {e.message}</li>)}</ol></details>}
           </div></div>)}</div>}

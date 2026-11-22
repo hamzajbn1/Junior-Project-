@@ -107,6 +107,13 @@ class AssistantJobs:
             finally:
                 self.slots.release()
 
+    def delete_chat(self, chat_id):
+        with self.lock:
+            CHAT_STORE.delete_chat(chat_id)
+            for identifier, job in list(self.jobs.items()):
+                if job["chat_id"] == chat_id:
+                    del self.jobs[identifier]
+
     def snapshot(self, identifier, chat_id=None):
         self.cleanup()
         with self.lock:
@@ -169,6 +176,11 @@ def create_assistant_blueprint():
         if request.get_json(silent=True) != {}:
             raise ServiceError("Create an empty conversation.", 400)
         return jsonify(CHAT_STORE.create_chat()), 201
+
+    @routes.delete("/api/assistant/chats/<int:chat_id>")
+    def delete_chat(chat_id):
+        ASSISTANT_JOBS.delete_chat(chat_id)
+        return jsonify({"deleted": True})
 
     @routes.get("/api/assistant/chats/<int:chat_id>")
     def load_chat(chat_id):

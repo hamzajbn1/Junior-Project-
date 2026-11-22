@@ -84,6 +84,19 @@ class ChatStore:
             return [dict(row) for row in connection.execute(
                 "SELECT * FROM assistant_chats ORDER BY updated_at DESC, chat_id DESC")]
 
+    def delete_chat(self, chat_id):
+        with self.database() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            running = connection.execute(
+                "SELECT 1 FROM assistant_turns WHERE chat_id = ? AND status = 'running'",
+                (chat_id,)).fetchone()
+            if running:
+                raise ServiceError("Wait for the request in this chat to finish before deleting it.",
+                                   409, code="chat_busy")
+            connection.execute("DELETE FROM assistant_chat_results WHERE chat_id = ?", (chat_id,))
+            connection.execute("DELETE FROM assistant_turns WHERE chat_id = ?", (chat_id,))
+            connection.execute("DELETE FROM assistant_chats WHERE chat_id = ?", (chat_id,))
+
     def load_chat(self, chat_id):
         with self.database() as connection:
             chat = self.require_chat(connection, chat_id)

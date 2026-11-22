@@ -1,11 +1,15 @@
 /* Assistant milestone: a chat workspace using the existing Overview palette. */
 .assistant-sidebar{min-height:0;overflow-y:auto}
 .assistant-chat-list{display:flex;flex-direction:column;gap:8px;min-height:70px;overflow-y:auto}
-.assistant-chat-list button{flex-shrink:0;display:grid;gap:5px;text-align:left;background:#fff;border:1px solid #dfe6da;border-radius:7px;padding:10px 12px;color:#365e50;cursor:pointer;font:inherit}
-.assistant-chat-list button[aria-current="page"]{background:#edf3e9;border-color:#94ad98}
+.assistant-chat-row{position:relative;flex-shrink:0;min-width:0}
+.assistant-open-chat{width:100%;display:grid;gap:5px;text-align:left;background:#fff;border:1px solid #dfe6da;border-radius:7px;padding:10px 40px 10px 12px;color:#365e50;cursor:pointer;font:inherit}
+.assistant-open-chat[aria-current="page"]{background:#edf3e9;border-color:#94ad98}
+.assistant-delete-chat{position:absolute;top:50%;right:7px;transform:translateY(-50%);display:grid;place-items:center;width:27px;height:27px;padding:0;border:0;border-radius:5px;background:transparent;color:#99443c;font-size:19px;line-height:1;cursor:pointer}
+.assistant-delete-chat:hover:not(:disabled){background:#f8e8e5}
+.assistant-delete-chat:disabled{color:#788276;opacity:.65;cursor:not-allowed}
 .assistant-chat-list small{font-size:10px;color:#738078}
 .assistant-chat-list span{font-size:12px;line-height:1.5;overflow-wrap:anywhere}
-@media(max-width:720px){.assistant-sidebar .assistant-chat-list{display:flex;flex-direction:row;max-width:45%;min-height:0}.assistant-chat-list button{max-width:160px}.assistant-chat-list span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.assistant-sidebar .assistant-model{display:none}}
+@media(max-width:720px){.assistant-sidebar .assistant-chat-list{display:flex;flex-direction:row;max-width:45%;min-height:0}.assistant-chat-row{max-width:160px}.assistant-chat-list span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.assistant-sidebar .assistant-model{display:none}}
 .page-heading nav{gap:26px}.page-heading nav a:not(.active){border-bottom-color:transparent;color:#738078}.page-heading nav a.active{border-bottom-color:var(--green);color:var(--green)}
 .assistant-layout{display:grid;grid-template-columns:310px minmax(0,1fr);height:calc(100dvh - 110px);min-height:560px}
 .assistant-sidebar{padding:38px 28px;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;gap:18px}

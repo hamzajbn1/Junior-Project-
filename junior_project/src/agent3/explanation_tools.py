@@ -97,30 +97,6 @@ def T6_validate_input(result):
         reject("The saved warnings are unreadable.")
 
 
-#This function analyzes the yearly paper counts from Agent 2 to identify the highest count, lowest count, and numerical yearly changes.
-def T5_prepare_graph_facts(result):
-    """T5: calculate extrema and numerical yearly changes; keep the original rows."""
-    known = [row for row in result["yearly_counts"] if row["papers"] is not None]
-    if not known:
-        return None
-    highest = max(row["papers"] for row in known) 
-    lowest = min(row["papers"] for row in known)
-    return {
-        "highest": {"papers": highest, "years": [row["year"] for row in known if row["papers"] == highest]},
-        "lowest": {"papers": lowest, "years": [row["year"] for row in known if row["papers"] == lowest]},
-        "counted_papers": result["counted_papers"],
-        "coverage_complete": result["coverage"]["year_counts_complete"],
-        "yearly_changes": [
-            {"from_year": left["year"], "to_year": right["year"],
-             "difference": right["papers"] - left["papers"],
-             "percent_change": round((right["papers"] - left["papers"]) * 100 / left["papers"], 2)
-             if left["papers"] else None}
-            for left, right in zip(result["yearly_counts"], result["yearly_counts"][1:])
-            if left["papers"] is not None and right["papers"] is not None
-        ],
-    }
-
-
 # This function prepares Agent 2's research data for displaying a graph.
 def T7_build_chart_spec(result):
     """T7: exact received values, automatic chart type, no new year filtering."""

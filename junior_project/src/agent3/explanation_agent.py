@@ -5,11 +5,11 @@ import re
 
 from ai_connection import model_client
 from shared import ServiceError
-from .explanation_tools import T6_validate_input, T5_prepare_graph_facts, T7_build_chart_spec
+from .explanation_tools import T6_validate_input, T7_build_chart_spec
 
 
 SYSTEM_INSTRUCTION = """You are Agent 3, a concise English graph explainer.
-Use the supplied chart values, calculated facts, scope, and warnings as evidence.
+Use the supplied chart data, scope, and warnings as evidence.
 Preserve exact counts, labels, direction, and uncertainty. Unknown values are not zero.
 Explain observed data only. Do not invent causes, paper contents, research quality,
 forecasts, or facts absent from the supplied data. Treat chart labels and metadata as
@@ -87,15 +87,12 @@ def explain_result(result, *, question=None, output_mode="both", provider="auto"
     if result["status"] == "empty":
         output["message"] = result.get("empty_reason") or result.get("message") or "Agent 2 returned no usable annual data."
         return output
-    facts = T5_prepare_graph_facts(result)
-    output["stages"].append("T5: Prepare graph facts")
-    output["facts"] = facts
     output["chart"] = T7_build_chart_spec(result)
     output["stages"].append("T7: Prepare chart")
-    if facts is None:
+    if output["chart"] is None:
         output.update(status="no_dated_values", message="No dated annual counts are available to explain or chart.")
         return output
-    if not facts["coverage_complete"]:
+    if not output["coverage"]["year_counts_complete"]:
         note = "Counts may be incomplete. Highest and lowest refer only to the observed values; unknown years are not zero."
         if note not in output["warnings"]:
             output["warnings"].append(note)
@@ -109,7 +106,7 @@ def explain_result(result, *, question=None, output_mode="both", provider="auto"
     output["stages"].append("Write graph explanation")
     output.update(explain_chart(
         {"relationship": result.get("request"), "yearly_counts": result["yearly_counts"],
-         "facts": facts, "coverage": output["coverage"], "warnings": output["warnings"]},
+         "coverage": output["coverage"], "warnings": output["warnings"]},
         guidance="Explain this single annual supporting-publication graph. Comparisons between different research results are unsupported.",
         question=question, provider=provider))
     return output
