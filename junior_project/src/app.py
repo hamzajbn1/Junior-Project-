@@ -134,9 +134,6 @@ def api_top_authors():
 from agent2.research_routes import create_research_blueprint
 app.register_blueprint(create_research_blueprint())
 
-from agent3.explanation_routes import create_explanation_blueprint
-app.register_blueprint(create_explanation_blueprint())
-
 from agent1.assistant_routes import create_assistant_blueprint
 app.register_blueprint(create_assistant_blueprint())
 
